@@ -1,6 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
+import { configureHaptics, triggerHaptic } from "./src/haptics.js";
 
 const CSS = `
+  :root {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+  }
   @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cormorant+Garamond:ital,wght@0,300;0,500;1,300;1,500&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=Space+Mono&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
   ::-webkit-scrollbar { width: 3px; }
@@ -18,9 +25,11 @@ const CSS = `
   @keyframes videoPulse { 0%,100%{opacity:0.45;transform:scaleX(0.82);} 50%{opacity:1;transform:scaleX(1);} }
   @keyframes hotspotPulse { 0%,100%{box-shadow:0 0 0 0 rgba(123,200,232,0.2);} 50%{box-shadow:0 0 0 9px rgba(123,200,232,0);} }
   @keyframes voiceBar { 0%,100%{height:8px;opacity:0.35;} 50%{height:28px;opacity:1;} }
+  @keyframes streamShimmer { 0%{background-position:-200% center;} 100%{background-position:200% center;} }
   .ricon-root { background:#080808; min-height:100dvh; color:#F0EBE3; font-family:"DM Sans",sans-serif; overflow-x:hidden; }
+  html, body { max-width:100%; overflow-x:hidden; }
   button { font: inherit; }
-  button:focus-visible, a:focus-visible, input:focus-visible { outline:2px solid #7BC8E8; outline-offset:3px; }
+  button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline:2px solid #7BC8E8; outline-offset:3px; }
   .bebas { font-family:"Bebas Neue",sans-serif; }
   .cormorant { font-family:"Cormorant Garamond",serif; }
   .mono { font-family:"Space Mono",monospace; }
@@ -38,6 +47,7 @@ const CSS = `
   .moment-item.hidden { opacity:0; transform:translateY(20px); }
   .moment-item.visible { opacity:1; transform:translateY(0); }
   .twin-input:focus { border-color:rgba(201,168,76,0.5) !important; outline:none; }
+  .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
   .twin-btn:hover { background:rgba(201,168,76,0.12) !important; border-color:rgba(201,168,76,0.7) !important; }
   .back-btn:hover { color:#C9A84C !important; }
   .mode-btn-active { background:#C9A84C !important; color:#080808 !important; }
@@ -51,8 +61,38 @@ const CSS = `
   .timeline-video { position:relative; overflow:hidden; width:min(520px,100%); min-height:154px; margin:18px 0 16px; border:1px solid rgba(255,255,255,0.08); background:#090909; cursor:pointer; }
   .timeline-video:before { content:""; position:absolute; inset:-30%; background:radial-gradient(circle at 24% 30%,rgba(123,200,232,0.18),transparent 24%),radial-gradient(circle at 74% 68%,rgba(201,168,76,0.22),transparent 30%),linear-gradient(135deg,rgba(255,255,255,0.06),transparent 45%); animation:slowDrift 12s ease-in-out infinite; }
   .timeline-video:after { content:""; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(0,0,0,0.08),rgba(0,0,0,0.62)),repeating-linear-gradient(to bottom,rgba(255,255,255,0.035) 0,rgba(255,255,255,0.035) 1px,transparent 1px,transparent 8px); pointer-events:none; }
+  .video-container { position:absolute; inset:0; z-index:0; overflow:hidden; background:#090909; contain:layout paint; }
+  .media-readable-overlay { position:absolute; inset:0; pointer-events:none; background:linear-gradient(180deg,rgba(4,4,4,0.2) 0%,rgba(4,4,4,0.44) 48%,rgba(4,4,4,0.78) 100%),radial-gradient(circle at 50% 36%,rgba(0,0,0,0.06) 0,rgba(0,0,0,0.38) 70%); }
+  .media-readable-overlay-strong { background:linear-gradient(180deg,rgba(4,4,4,0.26) 0%,rgba(4,4,4,0.56) 48%,rgba(4,4,4,0.84) 100%),radial-gradient(circle at 50% 36%,rgba(0,0,0,0.12) 0,rgba(0,0,0,0.48) 70%); }
+  .media-text-surface { text-shadow:0 2px 18px rgba(0,0,0,0.9),0 1px 2px rgba(0,0,0,0.95); }
+  .media-text-surface .bebas, .media-text-surface .cormorant, .media-text-surface .mono { text-shadow:inherit; }
+  .media-copy { color:rgba(255,250,240,0.88) !important; }
+  .media-muted-copy { color:rgba(255,250,240,0.72) !important; }
+  .video-container:before { content:""; position:absolute; inset:0; z-index:2; pointer-events:none; background:linear-gradient(180deg,rgba(4,4,4,0.16),rgba(4,4,4,0.42) 48%,rgba(4,4,4,0.68)); }
+  .video-media, .video-poster { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; opacity:0.62; }
+  .video-poster { background-size:cover; background-position:center; transform:scale(1.03); }
+  .video-media { z-index:1; }
+  .video-poster { z-index:0; }
+  .video-container-poster-only .video-poster { z-index:1; opacity:0.72; }
+  .video-overlay { z-index:2; }
+  .video-controls { position:absolute; left:calc(12px + var(--safe-left)); right:calc(12px + var(--safe-right)); bottom:calc(12px + var(--safe-bottom)); z-index:4; display:flex; align-items:center; gap:7px; opacity:0; transform:translateY(5px); transition:opacity 0.2s,transform 0.2s; pointer-events:auto; }
+  .interactive-video:hover .video-controls, .timeline-video:hover .video-controls, .video-container:focus-within .video-controls, .video-controls-visible { opacity:1; transform:translateY(0); }
+  .video-control-btn { min-width:32px; height:30px; display:inline-flex; align-items:center; justify-content:center; border:1px solid rgba(201,168,76,0.35); background:rgba(8,8,8,0.72); color:#C9A84C; border-radius:2px; cursor:pointer; font-family:"Space Mono",monospace; font-size:9px; letter-spacing:1px; }
+  .video-control-btn:hover { border-color:rgba(201,168,76,0.8); color:#FFD87A; background:rgba(201,168,76,0.1); }
+  .video-control-btn:focus-visible { outline:2px solid #7BC8E8; outline-offset:3px; }
+  .video-control-btn[aria-pressed="true"] { background:#C9A84C; color:#080808; border-color:#C9A84C; }
+  .video-control-spacer { flex:1; }
   .timeline-dot { width:36px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; }
   .timeline-content { flex:1; padding-left:18px; padding-bottom:20px; }
+  .chapter-nav { position:sticky; top:calc(65px + var(--safe-top)); z-index:80; padding:14px calc(40px + var(--safe-right)) 16px calc(40px + var(--safe-left)); display:grid; grid-template-columns:minmax(180px,260px) 1fr; gap:22px; align-items:center; background:rgba(8,8,8,0.88); border-top:1px solid rgba(255,255,255,0.04); border-bottom:1px solid rgba(255,255,255,0.06); backdrop-filter:blur(22px); }
+  .chapter-progress-track { height:2px; background:rgba(255,255,255,0.08); overflow:hidden; }
+  .chapter-progress-fill { height:100%; background:linear-gradient(90deg,#7BC8E8,#C9A84C,#FFD87A); transition:width 0.25s ease; }
+  .chapter-anchor-row { display:flex; align-items:center; gap:6px; min-width:0; overflow-x:auto; scrollbar-width:none; }
+  .chapter-anchor-row::-webkit-scrollbar { display:none; }
+  .chapter-anchor { flex:0 0 auto; min-width:42px; height:32px; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; border:1px solid rgba(255,255,255,0.08); color:#555; background:rgba(255,255,255,0.02); border-radius:2px; transition:color 0.2s,border-color 0.2s,background 0.2s; }
+  .chapter-anchor:hover, .chapter-anchor-active { color:#080808 !important; border-color:rgba(201,168,76,0.85) !important; background:#C9A84C !important; }
+  .chapter-section { scroll-margin-top:150px; }
+  .chapter-kicker { position:sticky; top:calc(146px + var(--safe-top)); z-index:2; display:inline-flex; align-items:center; gap:8px; margin-bottom:12px; padding:4px 9px; background:rgba(8,8,8,0.88); border:1px solid rgba(201,168,76,0.2); backdrop-filter:blur(14px); }
   .hotspot { animation:hotspotPulse 2.4s ease-in-out infinite; }
   .voice-panel { border:1px solid rgba(201,168,76,0.18); background:rgba(201,168,76,0.045); padding:12px 14px; margin-top:14px; display:flex; align-items:center; justify-content:space-between; gap:14px; }
   .voice-bars { display:flex; align-items:center; gap:4px; height:32px; }
@@ -61,19 +101,86 @@ const CSS = `
   .voice-bars span:nth-child(3) { animation-delay:0.2s; background:#7BC8E8; }
   .voice-bars span:nth-child(4) { animation-delay:0.3s; }
   .voice-bars span:nth-child(5) { animation-delay:0.4s; background:#FFD87A; }
+  .stream-caret { display:inline-block; width:7px; height:1.05em; margin-left:4px; vertical-align:-0.12em; background:#C9A84C; animation:dot 1.2s ease-in-out infinite; }
+  .stream-shimmer { width:min(340px,72vw); height:12px; border-radius:2px; background:linear-gradient(90deg,rgba(201,168,76,0.08),rgba(201,168,76,0.34),rgba(123,200,232,0.16),rgba(201,168,76,0.08)); background-size:200% 100%; animation:streamShimmer 1s linear infinite; }
+  .suggestion-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .suggestion-chip { font-family:"Space Mono",monospace; font-size:9px; letter-spacing:1px; padding:9px 12px; color:#C9A84C; background:rgba(201,168,76,0.035); border:1px solid rgba(201,168,76,0.22); border-radius:2px; cursor:pointer; line-height:1.45; text-align:left; transition:border-color 0.2s,color 0.2s,background 0.2s; }
+  .suggestion-chip:hover { border-color:rgba(201,168,76,0.68); color:#FFD87A; background:rgba(201,168,76,0.08); }
+  .suggestion-chip:focus-visible { outline:2px solid #7BC8E8; outline-offset:3px; }
+  .assistant-message-bubble { min-height:56px; contain:layout style; overflow-wrap:anywhere; word-break:normal; }
+  .twin-message-user { overflow-wrap:anywhere; word-break:break-word; }
+  .assistant-markdown { font-size:19px; color:#F0EBE3; line-height:1.75; overflow-wrap:anywhere; word-break:break-word; }
+  .assistant-markdown p { margin:0 0 12px; }
+  .assistant-markdown p:last-child { margin-bottom:0; }
+  .assistant-markdown ul, .assistant-markdown ol { margin:8px 0 14px 22px; padding:0; }
+  .assistant-markdown li { margin:5px 0; padding-left:3px; }
+  .assistant-markdown a { color:#7BC8E8; text-decoration:none; border-bottom:1px solid rgba(123,200,232,0.32); overflow-wrap:anywhere; word-break:break-all; }
+  .assistant-markdown code { font-family:"Space Mono",monospace; font-size:0.78em; color:#FFD87A; background:rgba(201,168,76,0.09); border:1px solid rgba(201,168,76,0.16); padding:0.08em 0.32em; border-radius:2px; white-space:break-spaces; overflow-wrap:anywhere; }
+  .assistant-markdown pre { max-width:100%; margin:12px 0 16px; padding:13px 14px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; background:rgba(255,255,255,0.035); border:1px solid rgba(255,255,255,0.08); border-radius:2px; }
+  .assistant-markdown pre code { display:block; padding:0; border:none; background:transparent; color:rgba(240,235,227,0.86); white-space:pre-wrap; }
+  .assistant-markdown .markdown-pending { border-color:rgba(123,200,232,0.22); background:rgba(123,200,232,0.045); }
+  .state-card { border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.03); padding:16px 18px; border-radius:2px; }
+  .state-card-title { font-size:9px; letter-spacing:2px; color:#7BC8E8; margin-bottom:8px; }
+  .state-card-copy { font-size:13px; line-height:1.6; color:rgba(240,235,227,0.68); }
+  .skeleton-shimmer { position:relative; overflow:hidden; background:rgba(255,255,255,0.06); border-radius:2px; }
+  .skeleton-shimmer:after {
+    content:"";
+    position:absolute;
+    inset:0;
+    transform:translateX(-100%);
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,0.16),transparent);
+    animation:streamShimmer 1.2s linear infinite;
+  }
   .proof-btn:hover, .story-card-btn:hover { border-color:rgba(201,168,76,0.65) !important; color:#FFD87A !important; background:rgba(201,168,76,0.08) !important; }
   .compact-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:2px; }
+  @media (hover: none), (pointer: coarse) {
+    .card-root:hover { border-color:transparent; box-shadow:none; }
+    .card-root:hover .card-tagline { color:rgba(240,235,227,0.32) !important; }
+    .card-root:hover .card-initials { opacity:1 !important; }
+    .card-explore { opacity:1 !important; transform:translateY(0) !important; }
+    .interactive-video .video-controls, .timeline-video .video-controls { opacity:1; transform:translateY(0); }
+    .interactive-video:hover .video-controls, .timeline-video:hover .video-controls { opacity:1; transform:translateY(0); }
+    .video-control-btn:hover, .proof-btn:hover, .story-card-btn:hover, .twin-btn:hover, .back-btn:hover, .suggestion-chip:hover, .chapter-anchor:hover {
+      background:inherit;
+      color:inherit;
+      border-color:inherit;
+    }
+  }
+  @media (pointer: coarse) {
+    button, .chapter-anchor, .suggestion-chip, .video-control-btn, .timeline-video, .proof-btn, .story-card-btn, .twin-btn, .back-btn, .cta-glow {
+      min-height:44px;
+      min-width:44px;
+    }
+    .chapter-anchor-row { gap:8px; }
+    .video-controls { gap:8px; }
+    .twin-input-row { gap:10px; }
+  }
   @media (prefers-reduced-motion: reduce) {
     *, *:before, *:after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+    .video-media { display:none !important; }
+    .video-container .video-poster { z-index:1; opacity:0.76; }
+  }
+  @media (max-width: 768px) {
+    .video-media { display:none !important; }
+    .video-container .video-poster { z-index:1; opacity:0.78; transform:none; }
+    .media-readable-overlay { background:linear-gradient(180deg,rgba(4,4,4,0.34) 0%,rgba(4,4,4,0.62) 48%,rgba(4,4,4,0.88) 100%),radial-gradient(circle at 50% 32%,rgba(0,0,0,0.18) 0,rgba(0,0,0,0.52) 68%); }
+    .media-text-surface { text-shadow:0 2px 16px rgba(0,0,0,0.95),0 1px 2px #000; }
+    .scanline-fx, .hero-field, .ring-a, .ring-b, .hotspot, .cta-glow { animation:none !important; }
+    .moment-item, .video-controls, .chapter-progress-fill, .card-root, .card-tagline, .card-explore { transition:none !important; }
   }
   @media (max-width: 760px) {
     .hide-mobile { display:none !important; }
-    .ricon-nav { padding:18px 18px !important; }
+    .ricon-nav { padding:calc(18px + var(--safe-top)) calc(18px + var(--safe-right)) 18px calc(18px + var(--safe-left)) !important; }
     .home-hero, .athlete-hero, .story-pad { padding-left:20px !important; padding-right:20px !important; }
     .home-hero { grid-template-columns:1fr !important; padding-top:32px !important; min-height:auto !important; }
     .story-layout, .twin-layout { flex-direction:column !important; }
     .twin-sidebar { display:none !important; }
     .timeline-wrap { padding:44px 20px 64px !important; }
+    .chapter-nav { top:calc(57px + var(--safe-top)) !important; grid-template-columns:1fr !important; gap:12px !important; padding:13px calc(18px + var(--safe-right)) 14px calc(18px + var(--safe-left)) !important; }
+    .chapter-anchor-row { margin-left:0; padding-bottom:2px; gap:8px !important; }
+    .chapter-anchor { min-width:44px; height:44px; }
+    .chapter-section { scroll-margin-top:172px; }
+    .chapter-kicker { position:static !important; max-width:100%; white-space:normal !important; }
     .timeline-heading { margin-bottom:34px !important; line-height:1.7 !important; }
     .timeline-line, .timeline-dot { display:none !important; }
     .timeline-row { display:block !important; margin-bottom:28px !important; padding:18px 0 28px !important; border-bottom:1px solid rgba(255,255,255,0.06) !important; }
@@ -85,21 +192,33 @@ const CSS = `
     .timeline-body { font-size:16px !important; line-height:1.55 !important; max-width:100% !important; }
     .timeline-video { width:100% !important; min-height:184px !important; margin:18px 0 16px !important; }
     .twin-modal { overflow-y:auto !important; backdrop-filter:none !important; }
-    .twin-header { padding:18px 18px !important; align-items:flex-start !important; gap:14px !important; flex-wrap:wrap !important; }
+    .twin-header { padding:calc(18px + var(--safe-top)) calc(18px + var(--safe-right)) 18px calc(18px + var(--safe-left)) !important; align-items:flex-start !important; gap:14px !important; flex-wrap:wrap !important; }
     .twin-title { width:100% !important; }
     .twin-title .bebas { font-size:34px !important; line-height:1.1 !important; }
     .twin-mode-toggle { order:2 !important; flex:1 1 auto !important; min-width:0 !important; }
-    .twin-mode-toggle button { flex:1 !important; padding:12px 10px !important; }
-    .twin-close { order:3 !important; flex:0 0 auto !important; padding:12px 14px !important; }
-    .twin-chat { padding:42px 20px 28px !important; overflow:visible !important; }
+    .twin-mode-toggle { width:100% !important; }
+    .twin-mode-toggle button { flex:1 !important; min-height:44px !important; padding:12px 10px !important; }
+    .twin-close { order:3 !important; flex:0 0 auto !important; min-height:44px !important; min-width:44px !important; padding:12px 14px !important; }
+    .twin-chat { padding:42px calc(20px + var(--safe-right)) 28px calc(20px + var(--safe-left)) !important; overflow:visible !important; }
     .twin-empty { padding-top:28px !important; }
     .twin-prompt-row { flex-direction:column !important; align-items:stretch !important; }
-    .twin-prompt-row button { width:100% !important; padding:13px 14px !important; line-height:1.5 !important; }
-    .twin-input-bar { padding:16px 18px max(20px, env(safe-area-inset-bottom)) !important; position:sticky !important; bottom:0 !important; background:rgba(4,4,4,0.96) !important; }
+    .twin-prompt-row button { width:100% !important; min-height:44px !important; padding:13px 14px !important; line-height:1.5 !important; }
+    .suggestion-row { flex-direction:column !important; align-items:stretch !important; }
+    .suggestion-chip { width:100% !important; min-height:44px !important; padding:13px 14px !important; }
+    .twin-input-bar { padding:16px calc(18px + var(--safe-right)) max(20px, calc(12px + var(--safe-bottom))) calc(18px + var(--safe-left)) !important; position:sticky !important; bottom:0 !important; background:rgba(4,4,4,0.96) !important; }
     .twin-input-row { flex-direction:column !important; }
-    .twin-input-row input, .twin-input-row button { width:100% !important; min-height:54px !important; }
+    .twin-input-row input, .twin-input-row textarea, .twin-input-row button { width:100% !important; min-height:54px !important; }
+    .twin-input-row > * + * { margin-top:8px; }
+    .twin-narrator-actions { position:sticky !important; bottom:0 !important; background:rgba(4,4,4,0.96) !important; padding-left:calc(18px + var(--safe-left)) !important; padding-right:calc(18px + var(--safe-right)) !important; padding-bottom:max(20px, calc(12px + var(--safe-bottom))) !important; }
+    .twin-narrator-actions .twin-btn { min-height:44px !important; }
     .twin-message-user { max-width:86% !important; }
+    .assistant-markdown { font-size:17px !important; line-height:1.68 !important; }
+    .assistant-markdown pre { font-size:12px; }
     .voice-panel { align-items:flex-start !important; flex-direction:column !important; }
+  }
+  @media (max-width: 360px) {
+    .ricon-nav, .twin-header, .chapter-nav, .twin-chat, .twin-input-bar { padding-left:calc(14px + var(--safe-left)) !important; padding-right:calc(14px + var(--safe-right)) !important; }
+    .twin-title .bebas { font-size:30px !important; letter-spacing:3px !important; }
   }
 `;
 
@@ -240,16 +359,247 @@ const collectibleFor = (athlete, moment, index = 0) => {
     url: `https://ricon.example/marketplace?athlete=${athlete.id}&moment=${encodeURIComponent(moment.title)}`
   };
 };
+const videoPosterFor = (athlete, moment) => {
+  const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675">
+    <rect width="1200" height="675" fill="#090909"/>
+    <radialGradient id="a" cx="32%" cy="28%" r="48%"><stop offset="0" stop-color="#7BC8E8" stop-opacity=".28"/><stop offset="1" stop-color="#7BC8E8" stop-opacity="0"/></radialGradient>
+    <radialGradient id="b" cx="72%" cy="68%" r="54%"><stop offset="0" stop-color="${cfg.color}" stop-opacity=".3"/><stop offset="1" stop-color="${cfg.color}" stop-opacity="0"/></radialGradient>
+    <rect width="1200" height="675" fill="url(#a)"/>
+    <rect width="1200" height="675" fill="url(#b)"/>
+    <g fill="none" stroke="#ffffff" stroke-opacity=".06">${Array.from({ length: 36 }, (_, i) => `<path d="M0 ${i * 20}H1200"/>`).join("")}</g>
+    <text x="78" y="118" fill="#7BC8E8" font-family="monospace" font-size="22" letter-spacing="10">RICON STORYLINE</text>
+    <text x="78" y="388" fill="#F0EBE3" font-family="Arial Black, Impact, sans-serif" font-size="168" letter-spacing="14">${athlete.initials}</text>
+    <text x="82" y="456" fill="#C9A84C" font-family="monospace" font-size="24" letter-spacing="7">${moment.y} - ${cfg.label}</text>
+  </svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+};
+const videoAssetsFor = (athlete, moment) => ({
+  poster: videoPosterFor(athlete, moment),
+  webm: moment.videoWebm,
+  mp4: moment.videoMp4,
+  // Add caption files per moment with `captionVtt: "/captions/<athlete>-<moment>.vtt"`.
+  captions: moment.captionVtt || moment.captionsVtt,
+});
 const storyPanelsFor = (athlete, moment) => [
   { k: "SETUP", t: `${moment.y} · ${moment.era}`, b: `${athlete.name} enters a defining chapter: ${moment.title}.` },
   { k: "MOMENT", t: "The verified record", b: moment.body },
   { k: "LEGACY", t: "Why it matters", b: `${moment.title} becomes part of the larger legacy arc: the moment fans remember, revisit, ask about, and eventually collect.` },
 ];
-const suggestedPromptsFor = (athlete, moment) => [
-  `Tell me about ${moment?.y || athlete.moments[0].y}.`,
-  `Why did ${moment?.title || athlete.moments[0].title} matter?`,
-  `What defined your legacy?`,
-];
+const chaptersFor = (athlete) => athlete.moments.map((moment, index) => ({
+  id: `chapter-${index + 1}`,
+  number: index + 1,
+  athlete,
+  moment,
+  title: moment.title,
+  era: moment.era,
+  year: moment.y,
+}));
+const chapterNumberFromHash = (hash = window.location.hash) => {
+  const match = hash.match(/^#chapter-(\d+)$/);
+  return match ? Number(match[1]) : null;
+};
+const chapterForContext = (athlete, moment, hash = window.location.hash) => {
+  const chapters = chaptersFor(athlete);
+  const momentIndex = moment ? athlete.moments.findIndex((item) => item === moment || item.title === moment.title) : -1;
+  if (momentIndex >= 0) return chapters[momentIndex];
+  const hashNumber = chapterNumberFromHash(hash);
+  return chapters[Math.min(Math.max((hashNumber || 1) - 1, 0), chapters.length - 1)] || chapters[0];
+};
+const isKnownAppPath = (pathname = window.location.pathname) => (
+  pathname === "/" || pathname === "/index.html"
+);
+const suggestionConfigFor = (athlete) => Object.fromEntries(chaptersFor(athlete).map((chapter) => {
+  const firstName = athlete.name.split(" ")[0];
+  const scene = chapter.title;
+  const year = chapter.year;
+  return [chapter.id, {
+    starter: [
+      { label: "What should I notice here?", prompt: `In ${year}, during "${scene}", what should I notice that most fans miss?` },
+      { label: "Ask what this moment means", prompt: `As ${firstName}, explain what "${scene}" meant in the larger story of your career.` },
+      { label: "Go deeper on this scene", prompt: `Take me deeper into "${scene}". What pressure, choice, or turning point defines this chapter?` },
+    ],
+    followup: [
+      { label: "Continue from this point", prompt: `Continue the story from "${scene}" and connect it to the next defining chapter.` },
+      { label: "Explain the motivation", prompt: `What motivation was driving ${firstName} in "${scene}"? Keep it grounded in the verified record.` },
+      { label: "Show the legacy impact", prompt: `Why does "${scene}" still matter to the legacy today?` },
+    ],
+  }];
+}));
+const suggestionsFor = (athlete, chapter, phase = "starter") => {
+  const config = suggestionConfigFor(athlete);
+  return (config[chapter?.id]?.[phase] || config["chapter-1"]?.[phase] || []).slice(0, 3);
+};
+const LazyTwinModal = lazy(() => import("./src/TwinModal.jsx"));
+const TWIN_PERSONA = {
+  id: "legacy-archivist",
+  name: "The Archivist",
+  icon: "◉",
+  avatarGlyph: "AR",
+  versionLabel: "ARCHIVIST v1.0",
+  badgeLabel: "PREMIUM STORY COMPANION",
+  emptyState: {
+    narratorHeadline: "Composing your opening scene...",
+    qaHeadline: "The record is open. Ask with intent.",
+    description: "I map verified moments into cinematic context, answer with source-grounded clarity, and keep every response faithful to the documented legacy.",
+    trustLine: "EVERY ANSWER IS GROUNDED IN THE VERIFIED RICON RECORD.",
+  },
+  toneGuidance: {
+    qa: "Best results: ask precise, chapter-aware questions for sharper narrative detail.",
+    narrator: "This companion speaks in premium, cinematic, source-grounded language.",
+  },
+  chapterIntroLine: (chapter, athlete) => (
+    chapter
+      ? `Now entering Chapter ${chapter.number}: ${chapter.title} (${chapter.year}) in ${athlete.name}'s timeline.`
+      : null
+  ),
+};
+const APP_CONFIG = {
+  hapticsEnabled: true,
+};
+const useMediaQuery = (query) => {
+  const [matches, setMatches] = useState(() => (
+    typeof window !== "undefined" && window.matchMedia ? window.matchMedia(query).matches : false
+  ));
+
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, [query]);
+
+  return matches;
+};
+const isSafeUrl = (url) => /^https?:\/\//i.test(url) || /^mailto:/i.test(url);
+const renderInlineMarkdown = (text, keyPrefix = "inline") => {
+  const parts = [];
+  const pattern = /(\[([^\]]+)\]\(([^)\s]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*|https?:\/\/[^\s<)]+)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    const [raw, , linkText, linkUrl, code, bold, italic] = match;
+    const key = `${keyPrefix}-${match.index}`;
+
+    if (linkText && isSafeUrl(linkUrl)) {
+      parts.push(<a key={key} href={linkUrl} target="_blank" rel="noreferrer">{linkText}</a>);
+    } else if (code) {
+      parts.push(<code key={key}>{code}</code>);
+    } else if (bold) {
+      parts.push(<strong key={key}>{bold}</strong>);
+    } else if (italic) {
+      parts.push(<em key={key}>{italic}</em>);
+    } else if (isSafeUrl(raw)) {
+      parts.push(<a key={key} href={raw} target="_blank" rel="noreferrer">{raw}</a>);
+    } else {
+      parts.push(raw);
+    }
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts;
+};
+
+function SafeMarkdown({ content, streaming }) {
+  const lines = String(content || "").replace(/\r\n/g, "\n").split("\n");
+  const blocks = [];
+  let paragraph = [];
+  let list = null;
+  let fence = null;
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    const text = paragraph.join(" ");
+    blocks.push(<p key={`p-${blocks.length}`}>{renderInlineMarkdown(text, `p-${blocks.length}`)}</p>);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!list) return;
+    const Tag = list.ordered ? "ol" : "ul";
+    blocks.push(
+      <Tag key={`list-${blocks.length}`}>
+        {list.items.map((item, index) => <li key={index}>{renderInlineMarkdown(item, `li-${blocks.length}-${index}`)}</li>)}
+      </Tag>
+    );
+    list = null;
+  };
+
+  lines.forEach((line) => {
+    const fenceMatch = line.match(/^```([\w-]+)?\s*$/);
+    if (fenceMatch) {
+      if (fence) {
+        blocks.push(
+          <pre key={`code-${blocks.length}`}>
+            <code>{fence.lines.join("\n")}</code>
+          </pre>
+        );
+        fence = null;
+      } else {
+        flushParagraph(); flushList();
+        fence = { lang: fenceMatch[1] || "", lines: [] };
+      }
+      return;
+    }
+
+    if (fence) {
+      fence.lines.push(line);
+      return;
+    }
+
+    const unordered = line.match(/^\s*[-*]\s+(.+)$/);
+    const ordered = line.match(/^\s*\d+\.\s+(.+)$/);
+    if (unordered || ordered) {
+      flushParagraph();
+      const orderedList = Boolean(ordered);
+      if (!list || list.ordered !== orderedList) flushList();
+      if (!list) list = { ordered: orderedList, items: [] };
+      list.items.push((unordered || ordered)[1]);
+      return;
+    }
+
+    if (!line.trim()) {
+      flushParagraph(); flushList();
+      return;
+    }
+
+    paragraph.push(line.trim());
+  });
+
+  flushParagraph(); flushList();
+  if (fence) {
+    blocks.push(
+      <pre key={`pending-code-${blocks.length}`} className="markdown-pending" aria-label={streaming ? "Streaming code block preview" : "Incomplete code block"}>
+        <code>{fence.lines.join("\n")}</code>
+      </pre>
+    );
+  }
+
+  return <div className="assistant-markdown cormorant">{blocks.length ? blocks : null}</div>;
+}
+function SuggestionChips({ suggestions, onSelect, disabled = false, label = "Suggested prompts" }) {
+  if (!suggestions.length) return null;
+  return (
+    <div aria-label={label} className="suggestion-row twin-prompt-row">
+      {suggestions.map((suggestion) => (
+        <button
+          key={`${suggestion.label}-${suggestion.prompt}`}
+          type="button"
+          className="suggestion-chip"
+          onClick={() => onSelect(suggestion.prompt)}
+          disabled={disabled}
+          aria-label={`${suggestion.label}: send suggested prompt`}
+        >
+          {suggestion.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const buildSystemPrompt = (a) => `You are the verified Digital Twin of ${a.name}, powered exclusively by documented, source-backed biographical data.
 
@@ -273,23 +623,55 @@ RULES — NON-NEGOTIABLE:
 7. Reference specific years and moments when relevant to ground your answer in fact.`;
 
 export default function RICONStoryline() {
-  const [screen, setScreen] = useState("home");
-  const [athlete, setAthlete] = useState(null);
+  const initialChapter = chapterNumberFromHash();
+  const routeMissing = !isKnownAppPath();
+  const [screen, setScreen] = useState(initialChapter ? "athlete" : "home");
+  const [athlete, setAthlete] = useState(initialChapter ? getFeaturedAthlete() : null);
   const [moment, setMoment] = useState(null);
   const [momentIndex, setMomentIndex] = useState(0);
   const [twinOpen, setTwinOpen] = useState(false);
   const [twinMode, setTwinMode] = useState("narrator");
 
   const openAthlete = (a) => { setAthlete(a); setScreen("athlete"); };
-  const openStory = (a, m, i = 0) => { setAthlete(a); setMoment(m); setMomentIndex(i); setScreen("story"); };
-  const goHome = () => { setScreen("home"); setAthlete(null); setMoment(null); setTwinOpen(false); };
+  const openStory = (a, m, i = 0) => {
+    triggerHaptic("primary");
+    setAthlete(a); setMoment(m); setMomentIndex(i); setScreen("story");
+  };
+  const goHome = () => {
+    window.history.pushState(null, "", "/");
+    setScreen("home"); setAthlete(null); setMoment(null); setTwinOpen(false);
+  };
   const backToAthlete = () => { setScreen("athlete"); setMoment(null); };
-  const openTwin = (mode) => { setTwinMode(mode); setTwinOpen(true); };
+  const openTwin = (mode) => {
+    triggerHaptic("success");
+    setTwinMode(mode); setTwinOpen(true);
+  };
+
+  useEffect(() => {
+    configureHaptics({ enabled: APP_CONFIG.hapticsEnabled });
+  }, []);
+
+  useEffect(() => {
+    const featuredAthlete = getFeaturedAthlete();
+    const featuredMoment = getFeaturedMoment();
+    const href = videoPosterFor(featuredAthlete, featuredMoment);
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = href;
+    document.head.appendChild(link);
+    return () => {
+      if (link.parentNode) link.parentNode.removeChild(link);
+    };
+  }, []);
 
   return (
     <>
       <style>{CSS}</style>
       <div className="ricon-root">
+        {routeMissing && <NotFoundScreen onHome={goHome} />}
+        {!routeMissing && (
+          <>
         {screen === "home" && <HomeScreen onSelect={openAthlete} onStory={openStory} />}
         {screen === "athlete" && athlete && (
           <AthleteScreen athlete={athlete} onBack={goHome} onTwin={openTwin} onStory={openStory} />
@@ -298,13 +680,21 @@ export default function RICONStoryline() {
           <StoryView athlete={athlete} moment={moment} momentIndex={momentIndex} onBack={backToAthlete} onHome={goHome} onTwin={openTwin} />
         )}
         {twinOpen && athlete && (
-          <TwinModal
-            athlete={athlete}
-            moment={moment}
-            mode={twinMode}
-            onClose={() => setTwinOpen(false)}
-            onSwitchMode={(m) => setTwinMode(m)}
-          />
+          <Suspense fallback={<div className="mono" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(4,4,4,0.94)", display: "grid", placeItems: "center", letterSpacing: 2, color: "#7BC8E8" }}>LOADING COMPANION...</div>}>
+            <LazyTwinModal
+              athlete={athlete}
+              moment={moment}
+              mode={twinMode}
+              onClose={() => setTwinOpen(false)}
+              onSwitchMode={(m) => setTwinMode(m)}
+              chapterForContext={chapterForContext}
+              suggestionsFor={suggestionsFor}
+              buildSystemPrompt={buildSystemPrompt}
+              persona={TWIN_PERSONA}
+            />
+          </Suspense>
+        )}
+          </>
         )}
       </div>
     </>
@@ -312,6 +702,26 @@ export default function RICONStoryline() {
 }
 
 // ─── HOME ────────────────────────────────────────────────────────────────────
+function NotFoundScreen({ onHome }) {
+  return (
+    <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center", padding: "40px 20px" }}>
+      <div className="story-panel" style={{ width: "min(680px,100%)", padding: "32px 26px", textAlign: "center" }}>
+        <div className="mono" style={{ fontSize: 9, color: "#7BC8E8", letterSpacing: 3, marginBottom: 12 }}>RICON STORYLINE · NOT FOUND</div>
+        <div className="bebas gold-text" style={{ fontSize: "clamp(44px,9vw,76px)", letterSpacing: 5, lineHeight: 0.95, marginBottom: 14 }}>Chapter Not Found</div>
+        <div className="cormorant" style={{ fontStyle: "italic", fontSize: "clamp(19px,4vw,28px)", color: "rgba(240,235,227,0.75)", lineHeight: 1.45, marginBottom: 18 }}>
+          This page is outside the verified storyline archive.
+        </div>
+        <div style={{ fontSize: 14, color: "rgba(240,235,227,0.52)", lineHeight: 1.65, marginBottom: 24 }}>
+          The chapter or route you requested could not be found. Return to the main storyline and continue from a verified moment.
+        </div>
+        <button onClick={onHome} className="cta-glow mono" style={{ fontSize: 10, letterSpacing: 2, padding: "13px 20px", background: "linear-gradient(135deg,#C9A84C,#FFD87A)", color: "#080808", border: "none", cursor: "pointer", borderRadius: 2 }}>
+          ← RETURN TO STORYLINE
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function HomeScreen({ onSelect, onStory }) {
   const featuredAthlete = getFeaturedAthlete();
   const featuredMoment = getFeaturedMoment();
@@ -319,7 +729,7 @@ function HomeScreen({ onSelect, onStory }) {
   return (
     <div style={{ minHeight: "100dvh", animation: "fadeIn 0.6s ease" }}>
       {/* Nav */}
-      <nav className="ricon-nav" style={{ padding: "26px 40px", display: "flex", alignItems: "center", gap: "14px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+      <nav className="ricon-nav" style={{ padding: "calc(26px + var(--safe-top)) calc(40px + var(--safe-right)) 26px calc(40px + var(--safe-left))", display: "flex", alignItems: "center", gap: "14px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
         <span className="bebas" style={{ fontSize: 20, letterSpacing: 5, color: "#C9A84C" }}>RICON</span>
         <div style={{ width: 1, height: 20, background: "#2a2a2a" }} />
         <span className="bebas" style={{ fontSize: 20, letterSpacing: 5, color: "rgba(240,235,227,0.45)" }}>STORYLINE</span>
@@ -439,10 +849,92 @@ function AthleteCard({ athlete, delay, onClick }) {
 function AthleteScreen({ athlete, onBack, onTwin, onStory }) {
   const leadMoment = athlete.moments.find(m => m.type === "championship" || m.type === "iconic") || athlete.moments[0];
   const leadIndex = athlete.moments.indexOf(leadMoment);
+  const chapters = useMemo(() => chaptersFor(athlete), [athlete]);
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const [activeChapter, setActiveChapter] = useState(() => Math.min(Math.max(chapterNumberFromHash() || 1, 1), chapters.length));
+  const active = chapters[activeChapter - 1] || chapters[0];
+  const isProgrammaticScroll = useRef(Boolean(chapterNumberFromHash()));
+  const activeChapterRef = useRef(activeChapter);
+  const chapterRafRef = useRef(null);
+
+  useEffect(() => {
+    activeChapterRef.current = activeChapter;
+  }, [activeChapter]);
+
+  useEffect(() => {
+    const scrollToChapter = (chapterNumber, behavior = "smooth") => {
+      const nextChapter = Math.min(Math.max(chapterNumber || 1, 1), chapters.length);
+      const target = document.getElementById(`chapter-${nextChapter}`);
+      if (!target) return;
+      isProgrammaticScroll.current = true;
+      setActiveChapter(nextChapter);
+      target.scrollIntoView({ behavior, block: "start" });
+      window.setTimeout(() => {
+        isProgrammaticScroll.current = false;
+      }, behavior === "auto" ? 1200 : 800);
+    };
+
+    const hashChapter = chapterNumberFromHash();
+    if (hashChapter) window.setTimeout(() => scrollToChapter(hashChapter, "auto"), 0);
+
+    const onHashChange = () => {
+      const next = chapterNumberFromHash();
+      if (next) scrollToChapter(next);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    window.addEventListener("popstate", onHashChange);
+    return () => {
+      window.removeEventListener("hashchange", onHashChange);
+      window.removeEventListener("popstate", onHashChange);
+    };
+  }, [chapters.length]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      let bestEntry = null;
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        if (!bestEntry || entry.intersectionRatio > bestEntry.intersectionRatio) bestEntry = entry;
+      }
+      if (!bestEntry || isProgrammaticScroll.current) return;
+      const next = Number(bestEntry.target.dataset.chapter);
+      if (!next || next === activeChapterRef.current) return;
+      if (chapterRafRef.current) cancelAnimationFrame(chapterRafRef.current);
+      chapterRafRef.current = requestAnimationFrame(() => {
+        activeChapterRef.current = next;
+        setActiveChapter(next);
+        triggerHaptic("chapter");
+        if (window.location.hash !== `#chapter-${next}`) {
+          window.history.replaceState(null, "", `#chapter-${next}`);
+        }
+      });
+    }, { rootMargin: "-35% 0px -45% 0px", threshold: [0.15, 0.35, 0.6] });
+
+    chapters.forEach((chapter) => {
+      const node = document.getElementById(chapter.id);
+      if (node) observer.observe(node);
+    });
+    return () => {
+      observer.disconnect();
+      if (chapterRafRef.current) cancelAnimationFrame(chapterRafRef.current);
+    };
+  }, [chapters]);
+
+  const jumpToChapter = (event, chapter) => {
+    event.preventDefault();
+    if (window.location.hash === `#${chapter.id}`) {
+      document.getElementById(chapter.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setActiveChapter(chapter.number);
+      return;
+    }
+    window.history.pushState(null, "", `#${chapter.id}`);
+    window.dispatchEvent(new Event("hashchange"));
+  };
+
   return (
     <div style={{ minHeight: "100dvh", animation: "fadeIn 0.4s ease" }}>
       {/* Sticky Nav */}
-      <nav className="ricon-nav" style={{ padding: "22px 40px", display: "flex", alignItems: "center", gap: 18, borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(8,8,8,0.96)", backdropFilter: "blur(24px)", zIndex: 90 }}>
+      <nav className="ricon-nav" style={{ padding: "calc(22px + var(--safe-top)) calc(40px + var(--safe-right)) 22px calc(40px + var(--safe-left))", display: "flex", alignItems: "center", gap: 18, borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(8,8,8,0.96)", backdropFilter: "blur(24px)", zIndex: 90 }}>
         <button className="mono back-btn" onClick={onBack}
           style={{ fontSize: 9, letterSpacing: 2, color: "#666", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, transition: "color 0.2s" }}>
           ← ROSTER
@@ -454,6 +946,35 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory }) {
           style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 3, color: "#080808", background: "linear-gradient(135deg,#C9A84C,#FFD87A)", border: "none", padding: "10px 20px", cursor: "pointer", borderRadius: 2 }}>
           ◉ ACTIVATE DIGITAL TWIN
         </button>
+      </nav>
+
+      <nav className="chapter-nav" aria-label={`${athlete.name} story chapters`}>
+        <div style={{ minWidth: 0 }}>
+          <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#7BC8E8", marginBottom: 7 }}>
+            CHAPTER {active.number}/{chapters.length}
+          </div>
+          <div className="bebas" style={{ fontSize: 20, letterSpacing: 3, color: "#F0EBE3", lineHeight: 1.05, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {active.title}
+          </div>
+          <div className="chapter-progress-track" aria-hidden="true" style={{ marginTop: 11 }}>
+            <div className="chapter-progress-fill" style={{ width: `${(active.number / chapters.length) * 100}%` }} />
+          </div>
+        </div>
+        <div className="chapter-anchor-row">
+          {chapters.map((chapter) => (
+            <a
+              key={chapter.id}
+              href={`#${chapter.id}`}
+              onClick={(event) => jumpToChapter(event, chapter)}
+              className={`chapter-anchor mono ${activeChapter === chapter.number ? "chapter-anchor-active" : ""}`}
+              aria-current={activeChapter === chapter.number ? "location" : undefined}
+              aria-label={`Jump to chapter ${chapter.number}: ${chapter.title}`}
+              style={{ fontSize: 9, letterSpacing: 1 }}
+            >
+              {String(chapter.number).padStart(2, "0")}
+            </a>
+          ))}
+        </div>
       </nav>
 
       {/* Hero */}
@@ -520,7 +1041,7 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory }) {
         </div>
         <div style={{ position: "relative" }}>
           <div className="timeline-line" style={{ position: "absolute", left: 114, top: 0, bottom: 0, width: 1, transform: "translateX(-0.5px)", background: "linear-gradient(to bottom,transparent,rgba(201,168,76,0.28) 8%,rgba(201,168,76,0.28) 92%,transparent)" }} />
-          {athlete.moments.map((m, i) => <TimelineMoment key={i} athlete={athlete} moment={m} index={i} total={athlete.moments.length} onStory={() => onStory(athlete, m, i)} />)}
+          {chapters.map((chapter, i) => <TimelineMoment key={chapter.id} chapter={chapter} athlete={athlete} moment={chapter.moment} index={i} total={chapters.length} active={activeChapter === chapter.number} reduceMotion={reducedMotion} onStory={() => onStory(athlete, chapter.moment, i)} />)}
         </div>
       </div>
 
@@ -537,20 +1058,32 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory }) {
 }
 
 // ─── TIMELINE MOMENT ──────────────────────────────────────────────────────────
-function TimelineMoment({ athlete, moment, index, total, onStory }) {
+function TimelineMoment({ chapter, athlete, moment, index, total, active, reduceMotion = false, onStory }) {
   const ref = useRef(null);
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(reduceMotion);
   const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
   const collectible = collectibleFor(athlete, moment, index);
 
   useEffect(() => {
+    if (reduceMotion) {
+      setVisible(true);
+      return undefined;
+    }
     const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect(); } }, { threshold: 0.15 });
     if (ref.current) obs.observe(ref.current);
     return () => obs.disconnect();
-  }, []);
+  }, [reduceMotion]);
 
   return (
-    <div ref={ref} className="moment-item" style={{ transitionDelay: `${index * 80}ms` }} data-visible={visible ? "true" : ""}>
+    <section
+      id={chapter.id}
+      ref={ref}
+      className="moment-item chapter-section"
+      style={{ transitionDelay: `${index * 80}ms` }}
+      data-visible={visible ? "true" : ""}
+      data-chapter={chapter.number}
+      aria-labelledby={`${chapter.id}-title`}
+    >
       <style>{`.moment-item[data-visible="true"]{opacity:1;transform:translateY(0);}.moment-item[data-visible="false"],.moment-item:not([data-visible]){opacity:0;transform:translateY(20px);}`}</style>
       <div className="timeline-row" style={{ display: "flex", marginBottom: 54 }}>
         {/* Year col */}
@@ -564,6 +1097,9 @@ function TimelineMoment({ athlete, moment, index, total, onStory }) {
         </div>
         {/* Content */}
         <div className="timeline-content" style={{ borderBottom: index < total - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+          <div className="chapter-kicker mono" style={{ color: active ? "#C9A84C" : "#555", letterSpacing: 2, fontSize: 8 }}>
+            CHAPTER {String(chapter.number).padStart(2, "0")} <span style={{ color: "#333" }}>·</span> {chapter.era}
+          </div>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 12, padding: "3px 10px", border: `1px solid ${cfg.color}40`, borderRadius: 2 }}>
             <span className="mono" style={{ fontSize: 9, letterSpacing: 2, color: cfg.color }}>{cfg.icon} {cfg.label}</span>
           </div>
@@ -572,7 +1108,7 @@ function TimelineMoment({ athlete, moment, index, total, onStory }) {
               OWNABLE MOMENT
             </div>
           )}
-          <button onClick={onStory} className="timeline-title story-card-btn bebas" style={{ display: "block", textAlign: "left", fontSize: 24, letterSpacing: 2, color: "#F0EBE3", lineHeight: 1.2, marginBottom: 12, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          <button id={`${chapter.id}-title`} onClick={onStory} className="timeline-title story-card-btn bebas" style={{ display: "block", textAlign: "left", fontSize: 24, letterSpacing: 2, color: active ? "#FFD87A" : "#F0EBE3", lineHeight: 1.2, marginBottom: 12, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
             {moment.title}
           </button>
           <div className="timeline-body cormorant" style={{ fontStyle: "italic", fontSize: 17, color: "rgba(240,235,227,0.62)", lineHeight: 1.75, marginBottom: 14, maxWidth: 660 }}>{moment.body}</div>
@@ -582,6 +1118,215 @@ function TimelineMoment({ athlete, moment, index, total, onStory }) {
             <button onClick={onStory} className="story-card-btn mono" style={{ fontSize: 9, color: "#C9A84C", letterSpacing: 2, background: "transparent", border: "1px solid rgba(201,168,76,0.22)", padding: "6px 10px", cursor: "pointer", borderRadius: 2 }}>PLAY STORY →</button>
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function SafeStoryVideo({ athlete, moment, eager = false, loop = false, autoPlay = false, background = false }) {
+  const ref = useRef(null);
+  const videoRef = useRef(null);
+  const [inView, setInView] = useState(eager);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(true);
+  const [captionsOn, setCaptionsOn] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [posterLoading, setPosterLoading] = useState(true);
+  const [posterError, setPosterError] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
+  const [mediaError, setMediaError] = useState(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const isMobile = useMediaQuery("(max-width: 768px)");
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const assets = useMemo(() => videoAssetsFor(athlete, moment), [athlete, moment]);
+  const hasSources = Boolean(assets.webm || assets.mp4);
+  const hasCaptions = Boolean(assets.captions);
+  const posterOnly = (background && isMobile) || reducedMotion;
+  const shouldLoad = hasSources && !posterOnly && (eager || inView);
+  const shouldAutoPlay = autoPlay && !posterOnly;
+  const shouldLoadPoster = eager || inView || !background;
+  const mediaFailed = Boolean(posterError || mediaError);
+
+  const syncTracks = (enabled) => {
+    const tracks = videoRef.current?.textTracks;
+    if (!tracks) return;
+    Array.from(tracks).forEach((track) => {
+      track.mode = enabled ? "showing" : "disabled";
+    });
+  };
+
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      video.play?.().then(() => setPlaying(true)).catch(() => {});
+    } else {
+      video.pause?.();
+      setPlaying(false);
+    }
+  };
+
+  const toggleMute = () => {
+    const next = !muted;
+    setMuted(next);
+    if (videoRef.current) videoRef.current.muted = next;
+  };
+
+  const toggleCaptions = () => {
+    const next = !captionsOn;
+    setCaptionsOn(next);
+    syncTracks(next);
+  };
+
+  const toggleFullscreen = () => {
+    const node = ref.current;
+    if (!node) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.();
+    } else {
+      node.requestFullscreen?.();
+    }
+  };
+
+  const seekBy = (seconds) => {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(video.duration)) return;
+    video.currentTime = Math.min(Math.max(video.currentTime + seconds, 0), video.duration);
+  };
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      const visible = entry.isIntersecting;
+      setInView(visible);
+      if (!visible) videoRef.current?.pause?.();
+      if (visible && shouldAutoPlay && videoRef.current?.paused) {
+        videoRef.current.play?.().catch(() => {});
+      }
+    }, { rootMargin: eager ? "0px" : "180px 0px", threshold: 0.2 });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [eager, shouldAutoPlay]);
+
+  useEffect(() => {
+    if (posterOnly) videoRef.current?.pause?.();
+  }, [posterOnly]);
+
+  useEffect(() => {
+    syncTracks(captionsOn);
+  }, [captionsOn, shouldLoad]);
+
+  useEffect(() => {
+    const onFullscreenChange = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const handleKeyDown = (event) => {
+    if (event.target instanceof HTMLButtonElement) return;
+    const key = event.key.toLowerCase();
+    if (key === " ") { event.preventDefault(); togglePlay(); }
+    if (key === "m") { event.preventDefault(); toggleMute(); }
+    if (key === "c") { event.preventDefault(); toggleCaptions(); }
+    if (key === "f") { event.preventDefault(); toggleFullscreen(); }
+    if (event.key === "ArrowLeft") { event.preventDefault(); seekBy(-5); }
+    if (event.key === "ArrowRight") { event.preventDefault(); seekBy(5); }
+  };
+
+  const retryMedia = () => {
+    setPosterLoading(true);
+    setPosterError(false);
+    setVideoReady(false);
+    setMediaError(null);
+    setReloadToken((n) => n + 1);
+  };
+
+  useEffect(() => {
+    setPosterLoading(true);
+    setPosterError(false);
+    setVideoReady(false);
+    setMediaError(null);
+    const img = new Image();
+    img.onload = () => setPosterLoading(false);
+    img.onerror = () => { setPosterLoading(false); setPosterError(true); };
+    img.src = assets.poster;
+  }, [assets.poster, reloadToken]);
+
+  return (
+    <div
+      ref={ref}
+      className={`video-container ${posterOnly || !hasSources ? "video-container-poster-only" : ""}`}
+      tabIndex={0}
+      role="group"
+      aria-label={`${moment.title} video controls`}
+      onKeyDown={handleKeyDown}
+    >
+      <div className="video-poster" style={{ backgroundImage: shouldLoadPoster ? `url("${assets.poster}")` : "none" }} />
+      {shouldLoad && (
+        <video
+          key={`${moment.title}-${reloadToken}`}
+          ref={videoRef}
+          className="video-media"
+          muted={muted}
+          playsInline
+          playsinline="true"
+          preload="metadata"
+          poster={assets.poster}
+          loop={loop}
+          autoPlay={shouldAutoPlay}
+          controls={false}
+          disablePictureInPicture
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onCanPlay={() => setVideoReady(true)}
+          onLoadedMetadata={() => syncTracks(captionsOn)}
+          onError={() => setMediaError("Video stream unavailable for this moment.")}
+        >
+          {assets.webm && <source src={assets.webm} type="video/webm" />}
+          {assets.mp4 && <source src={assets.mp4} type="video/mp4" />}
+          {assets.captions && <track kind="captions" src={assets.captions} srcLang="en" label="English captions" default={captionsOn} />}
+        </video>
+      )}
+      <div className="video-overlay media-readable-overlay" />
+      {(posterLoading || (shouldLoad && !videoReady)) && !mediaFailed && (
+        <div className="state-card mono" style={{ position: "absolute", left: 14, top: 14, zIndex: 5, fontSize: 8, letterSpacing: 2, color: "#7BC8E8" }}>
+          LOADING MEDIA...
+        </div>
+      )}
+      {mediaFailed && (
+        <div className="state-card" style={{ position: "absolute", inset: 14, zIndex: 6, display: "flex", flexDirection: "column", justifyContent: "center", gap: 10, background: "rgba(8,8,8,0.86)" }}>
+          <div className="mono state-card-title">MEDIA UNAVAILABLE</div>
+          <div className="state-card-copy">
+            {posterError ? "We couldn't load the poster image for this chapter." : mediaError || "The media failed to load."}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="proof-btn mono" type="button" onClick={retryMedia} style={{ fontSize: 8, letterSpacing: 2, padding: "8px 10px", color: "#C9A84C", background: "transparent", border: "1px solid rgba(201,168,76,0.25)", cursor: "pointer" }}>
+              RETRY MEDIA
+            </button>
+          </div>
+        </div>
+      )}
+      <div className={`video-controls ${hasSources ? "video-controls-visible" : ""}`} aria-label="Video controls">
+        <button className="video-control-btn" type="button" onClick={togglePlay} disabled={!shouldLoad || mediaFailed} aria-label={playing ? `Pause ${moment.title}` : `Play ${moment.title}`}>
+          {playing ? "II" : "▶"}
+        </button>
+        <button className="video-control-btn" type="button" onClick={toggleMute} disabled={!hasSources || mediaFailed} aria-pressed={!muted} aria-label={muted ? `Unmute ${moment.title}` : `Mute ${moment.title}`}>
+          {muted ? "MUTE" : "ON"}
+        </button>
+        <button className="video-control-btn" type="button" onClick={toggleCaptions} disabled={!hasCaptions || mediaFailed} aria-pressed={captionsOn} aria-label={hasCaptions ? `${captionsOn ? "Disable" : "Enable"} captions for ${moment.title}` : `Captions unavailable for ${moment.title}. Add .vtt files to moment.captionVtt.`}>
+          CC
+        </button>
+        <button className="video-control-btn" type="button" onClick={() => seekBy(-5)} disabled={!shouldLoad || mediaFailed} aria-label={`Seek ${moment.title} backward 5 seconds`}>
+          -5
+        </button>
+        <button className="video-control-btn" type="button" onClick={() => seekBy(5)} disabled={!shouldLoad || mediaFailed} aria-label={`Seek ${moment.title} forward 5 seconds`}>
+          +5
+        </button>
+        <span className="video-control-spacer" />
+        <button className="video-control-btn" type="button" onClick={toggleFullscreen} disabled={mediaFailed} aria-pressed={fullscreen} aria-label={fullscreen ? `Exit fullscreen for ${moment.title}` : `Enter fullscreen for ${moment.title}`}>
+          F
+        </button>
       </div>
     </div>
   );
@@ -594,7 +1339,8 @@ function TimelineVideoPreview({ athlete, moment, index, onPlay }) {
 
   return (
     <button className="timeline-video" onClick={onPlay} aria-label={`Open video preview for ${moment.title}`}>
-      <div style={{ position: "relative", zIndex: 1, minHeight: "inherit", padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", textAlign: "left" }}>
+      <SafeStoryVideo athlete={athlete} moment={moment} background />
+      <div className="media-text-surface" style={{ position: "relative", zIndex: 1, minHeight: "inherit", padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", textAlign: "left" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
           <div>
             <div className="mono" style={{ fontSize: 8, letterSpacing: 3, color: "#7BC8E8", marginBottom: 8 }}>STORY PREVIEW</div>
@@ -608,7 +1354,7 @@ function TimelineVideoPreview({ athlete, moment, index, onPlay }) {
             <span className="bebas" style={{ fontSize: 22, transform: "translateX(1px)" }}>▶</span>
           </span>
           <div style={{ flex: 1 }}>
-            <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#777", marginBottom: 8 }}>{moment.y} · TAP TO OPEN STORY</div>
+            <div className="mono media-muted-copy" style={{ fontSize: 8, letterSpacing: 2, marginBottom: 8 }}>{moment.y} · TAP TO OPEN STORY</div>
             <div style={{ height: 3, background: "rgba(255,255,255,0.12)" }}>
               <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#7BC8E8,#C9A84C,#FFD87A)" }} />
             </div>
@@ -639,13 +1385,14 @@ function InteractiveStoryVideo({ athlete, moment, compact = false, progress = 0,
 
   return (
     <section className="interactive-video" aria-label={`Interactive video for ${moment.title}`} style={{ minHeight: compact ? 300 : 430 }}>
-      <div style={{ position: "relative", zIndex: 1, minHeight: compact ? 300 : 430, padding: compact ? 22 : 26, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+      <SafeStoryVideo athlete={athlete} moment={moment} eager={!compact} autoPlay={false} loop={false} background />
+      <div className="media-text-surface" style={{ position: "relative", zIndex: 1, minHeight: compact ? 300 : 430, padding: compact ? 22 : 26, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 18, alignItems: "start" }}>
           <div>
             <div className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8", marginBottom: 10 }}>
               INTERACTIVE STORY VIDEO
             </div>
-            <div className="bebas" style={{ fontSize: compact ? 30 : 38, letterSpacing: 3, color: "#F0EBE3", lineHeight: 1 }}>
+            <div className="bebas media-copy" style={{ fontSize: compact ? 30 : 38, letterSpacing: 3, lineHeight: 1 }}>
               {moment.title}
             </div>
           </div>
@@ -675,8 +1422,8 @@ function InteractiveStoryVideo({ athlete, moment, compact = false, progress = 0,
             <div style={{ height: "100%", width: `${clampedProgress}%`, background: "linear-gradient(90deg,#7BC8E8,#C9A84C,#FFD87A)", transition: "width 0.3s ease" }} />
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-            <div className="mono" style={{ fontSize: 8, color: "#777", letterSpacing: 1 }}>{moment.y} · {source.level}</div>
-            <div className="mono" style={{ fontSize: 8, color: "#555", letterSpacing: 1 }}>CAPTIONS · HOTSPOTS · STORY</div>
+            <div className="mono media-muted-copy" style={{ fontSize: 8, letterSpacing: 1 }}>{moment.y} · {source.level}</div>
+            <div className="mono media-muted-copy" style={{ fontSize: 8, letterSpacing: 1 }}>CAPTIONS · HOTSPOTS · STORY</div>
           </div>
         </div>
       </div>
@@ -687,14 +1434,23 @@ function InteractiveStoryVideo({ athlete, moment, compact = false, progress = 0,
 // ─── STORY VIEW ───────────────────────────────────────────────────────────────
 function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin }) {
   const [step, setStep] = useState(0);
+  const [sceneLoading, setSceneLoading] = useState(true);
   const panels = storyPanelsFor(athlete, moment);
   const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
   const collectible = collectibleFor(athlete, moment, momentIndex);
   const progress = Math.round(((step + 1) / panels.length) * 100);
   const complete = step === panels.length - 1;
+  const activePanel = panels[step];
+  const missingChapterContent = !moment?.title || !moment?.body || !activePanel?.b || !panels.length;
 
   const next = () => setStep(s => Math.min(s + 1, panels.length - 1));
   const prev = () => setStep(s => Math.max(s - 1, 0));
+
+  useEffect(() => {
+    setSceneLoading(true);
+    const id = window.setTimeout(() => setSceneLoading(false), 280);
+    return () => window.clearTimeout(id);
+  }, [moment?.title]);
 
   return (
     <div className="story-shell" style={{ animation: "fadeIn 0.35s ease" }}>
@@ -703,7 +1459,7 @@ function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin }) {
         {athlete.initials}
       </div>
 
-      <nav className="ricon-nav" style={{ position: "relative", zIndex: 2, padding: "22px 40px", display: "flex", alignItems: "center", gap: 14, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      <nav className="ricon-nav" style={{ position: "relative", zIndex: 2, padding: "calc(22px + var(--safe-top)) calc(40px + var(--safe-right)) 22px calc(40px + var(--safe-left))", display: "flex", alignItems: "center", gap: 14, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <button className="mono back-btn" onClick={onBack} style={{ fontSize: 9, letterSpacing: 2, color: "#777", background: "none", border: "none", cursor: "pointer" }}>← TIMELINE</button>
         <div style={{ width: 1, height: 16, background: "#252525" }} />
         <span className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8" }}>{athlete.name}</span>
@@ -717,12 +1473,32 @@ function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin }) {
             <div className="mono" style={{ display: "inline-flex", gap: 8, alignItems: "center", border: `1px solid ${cfg.color}55`, color: cfg.color, padding: "6px 10px", fontSize: 9, letterSpacing: 2, marginBottom: 24 }}>
               {cfg.icon} {cfg.label} · {moment.y} · {sourceDetailsFor(moment).level}
             </div>
-            <h1 className="bebas" style={{ fontSize: "clamp(54px,9vw,116px)", letterSpacing: 7, lineHeight: 0.88, color: "#F0EBE3", maxWidth: 900, marginBottom: 24 }}>
-              {moment.title}
-            </h1>
-            <div className="cormorant" style={{ fontStyle: "italic", fontSize: "clamp(22px,3vw,34px)", lineHeight: 1.45, color: "rgba(240,235,227,0.72)", maxWidth: 820 }}>
-              {panels[step].b}
-            </div>
+            {missingChapterContent ? (
+              <div className="state-card" style={{ maxWidth: 820 }}>
+                <div className="mono state-card-title">CHAPTER CONTENT MISSING</div>
+                <div className="state-card-copy">This chapter is still being prepared. You can return to the timeline or ask the companion to continue with verified context.</div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                  <button onClick={onBack} className="story-card-btn mono" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 14px", background: "rgba(255,255,255,0.03)", color: "#C9A84C", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer" }}>RETURN TO TIMELINE</button>
+                  <button onClick={() => onTwin("qa")} className="cta-glow mono" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 16px", background: "#C9A84C", color: "#080808", border: "none", cursor: "pointer" }}>ASK THE COMPANION</button>
+                </div>
+              </div>
+            ) : sceneLoading ? (
+              <div style={{ maxWidth: 860 }}>
+                <div className="skeleton-shimmer" style={{ height: 72, width: "min(760px, 100%)", marginBottom: 20 }} />
+                <div className="skeleton-shimmer" style={{ height: 18, width: "100%", marginBottom: 10 }} />
+                <div className="skeleton-shimmer" style={{ height: 18, width: "95%", marginBottom: 10 }} />
+                <div className="skeleton-shimmer" style={{ height: 18, width: "82%" }} />
+              </div>
+            ) : (
+              <>
+                <h1 className="bebas" style={{ fontSize: "clamp(54px,9vw,116px)", letterSpacing: 7, lineHeight: 0.88, color: "#F0EBE3", maxWidth: 900, marginBottom: 24 }}>
+                  {moment.title}
+                </h1>
+                <div className="cormorant" style={{ fontStyle: "italic", fontSize: "clamp(22px,3vw,34px)", lineHeight: 1.45, color: "rgba(240,235,227,0.72)", maxWidth: 820 }}>
+                  {activePanel.b}
+                </div>
+              </>
+            )}
           </div>
 
           <div style={{ marginTop: 42 }}>
@@ -730,11 +1506,18 @@ function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin }) {
               <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#7BC8E8,#C9A84C,#FFD87A)", transition: "width 0.35s ease" }} />
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
-              <div className="mono" style={{ fontSize: 9, color: "#555", letterSpacing: 2 }}>SCENE {step + 1}/{panels.length} · {panels[step].k}</div>
+              <div className="mono" style={{ fontSize: 9, color: "#555", letterSpacing: 2 }}>
+                {missingChapterContent ? "CHAPTER STATUS · PENDING CONTENT" : `SCENE ${step + 1}/${panels.length} · ${activePanel.k}`}
+              </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <button onClick={prev} disabled={step === 0} className="story-card-btn mono" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 14px", background: "rgba(255,255,255,0.03)", color: step === 0 ? "#333" : "#C9A84C", border: "1px solid rgba(255,255,255,0.08)", cursor: step === 0 ? "not-allowed" : "pointer" }}>BACK</button>
-                <button onClick={complete ? () => onTwin("qa") : next} className="cta-glow mono" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 16px", background: "#C9A84C", color: "#080808", border: "none", cursor: "pointer" }}>
-                  {complete ? "ASK THE TWIN" : "CONTINUE"}
+                <button onClick={prev} disabled={step === 0 || missingChapterContent} className="story-card-btn mono" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 14px", background: "rgba(255,255,255,0.03)", color: step === 0 || missingChapterContent ? "#333" : "#C9A84C", border: "1px solid rgba(255,255,255,0.08)", cursor: step === 0 || missingChapterContent ? "not-allowed" : "pointer" }}>BACK</button>
+                <button onClick={() => {
+                  triggerHaptic("primary");
+                  if (missingChapterContent) onTwin("qa");
+                  else if (complete) onTwin("qa");
+                  else next();
+                }} className="cta-glow mono" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 16px", background: "#C9A84C", color: "#080808", border: "none", cursor: "pointer" }}>
+                  {missingChapterContent || complete ? "ASK THE TWIN" : "CONTINUE"}
                 </button>
               </div>
             </div>
@@ -789,23 +1572,42 @@ function VoiceSynthesisPanel({ active, status, onPlay, onStop, mode }) {
 
 // ─── TWIN MODAL ───────────────────────────────────────────────────────────────
 function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
+  const persona = TWIN_PERSONA;
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [streamingId, setStreamingId] = useState(null);
   const [isListening, setIsListening] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("ready");
   const [speakingIndex, setSpeakingIndex] = useState(null);
+  const [currentChapter, setCurrentChapter] = useState(() => chapterForContext(athlete, moment));
   const apiHistory = useRef([]);
+  const abortRef = useRef(null);
+  const lastRequestRef = useRef(null);
   const bottomRef = useRef(null);
+  const composerRef = useRef(null);
   const modeRef = useRef(null);
   const recognitionRef = useRef(null);
-  const prompts = suggestedPromptsFor(athlete, moment);
+  const starterSuggestions = useMemo(() => suggestionsFor(athlete, currentChapter, "starter"), [athlete, currentChapter]);
+  const followupSuggestions = useMemo(() => suggestionsFor(athlete, currentChapter, "followup"), [athlete, currentChapter]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
 
+  useEffect(() => {
+    const updateChapter = () => setCurrentChapter(chapterForContext(athlete, moment));
+    updateChapter();
+    window.addEventListener("hashchange", updateChapter);
+    window.addEventListener("popstate", updateChapter);
+    return () => {
+      window.removeEventListener("hashchange", updateChapter);
+      window.removeEventListener("popstate", updateChapter);
+    };
+  }, [athlete, moment]);
+
   useEffect(() => () => {
     recognitionRef.current?.stop?.();
+    abortRef.current?.abort?.();
   }, []);
 
   const showVoice = (index = "latest") => {
@@ -840,64 +1642,137 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
     recognition.start();
   };
 
-  const fetchTwin = async (history) => {
+  const errorMessageFor = (status, text) => {
+    if (status === 429) return "The companion is receiving high traffic right now. Please wait a few seconds, then retry.";
+    if (status === 401 || status === 403) return "The companion service is not authorized. Check the server API key configuration and retry.";
+    if (status >= 500) return "The companion service is temporarily unavailable. Retry in a moment or switch modes.";
+    return text || "We couldn't reach the companion service. Check your connection and try again.";
+  };
+
+  const streamTwin = async ({ history, assistantId, onComplete }) => {
+    abortRef.current?.abort?.();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setLoading(true); setError(null); setStreamingId(assistantId);
+
     const res = await fetch("/api/twin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ athlete, system: buildSystemPrompt(athlete), messages: history }),
+      signal: controller.signal,
+      body: JSON.stringify({
+        athlete,
+        system: buildSystemPrompt(athlete),
+        messages: history.map(({ role, content }) => ({ role, content })),
+      }),
     });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || "Twin request failed.");
-    return data.text || "The twin is momentarily silent.";
+
+    if (!res.ok) {
+      throw new Error(errorMessageFor(res.status, await res.text()));
+    }
+    if (!res.body) throw new Error("Streaming is unavailable in this browser. Try refreshing or using a modern browser.");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      fullText += chunk;
+      setMessages((current) => current.map((msg) => (
+        msg.id === assistantId ? { ...msg, content: fullText, streaming: true } : msg
+      )));
+    }
+
+    const reply = fullText || "The twin is momentarily silent.";
+    setMessages((current) => current.map((msg) => (
+      msg.id === assistantId ? { ...msg, content: reply, streaming: false } : msg
+    )));
+    onComplete?.(reply);
+    return reply;
+  };
+
+  const runTwinRequest = async ({ history, userMessage = null, replaceAssistantId = null, modeTag = mode, onComplete }) => {
+    const assistantId = replaceAssistantId || `assistant-${Date.now()}`;
+    lastRequestRef.current = { history: [...history], assistantId, modeTag };
+    if (userMessage) setMessages(p => [...p, userMessage, { id: assistantId, role: "assistant", content: "", streaming: true }]);
+    else if (replaceAssistantId) setMessages(p => p.map(msg => msg.id === replaceAssistantId ? { ...msg, content: "", streaming: true } : msg));
+    else setMessages(p => [...p, { id: assistantId, role: "assistant", content: "", streaming: true }]);
+
+    try {
+      await streamTwin({ history, assistantId, onComplete });
+      showVoice(assistantId);
+    } catch (err) {
+      if (err.name === "AbortError") {
+        setMessages(p => p.map(msg => msg.id === assistantId ? { ...msg, streaming: false, stopped: true, content: msg.content || "Generation stopped." } : msg));
+      } else {
+        setError(err.message || "Unable to reach the Digital Twin. Please try again.");
+        setMessages(p => p.map(msg => msg.id === assistantId ? { ...msg, streaming: false, failed: true, content: msg.content || "" } : msg));
+      }
+    } finally {
+      setLoading(false);
+      setStreamingId(null);
+      abortRef.current = null;
+    }
+  };
+
+  const stopGeneration = () => {
+    abortRef.current?.abort?.();
+  };
+
+  const retryLatest = () => {
+    const last = lastRequestRef.current;
+    if (!last || loading) return;
+    runTwinRequest({
+      history: last.history,
+      replaceAssistantId: last.assistantId,
+      modeTag: last.modeTag,
+      onComplete: (reply) => {
+        apiHistory.current = [...last.history, { role: "assistant", content: reply }];
+      }
+    });
   };
 
   const triggerNarrator = async () => {
-    setLoading(true); setError(null);
     const prompt = `You are narrating your own legacy for a fan experiencing your verified story for the first time. Open with a powerful, cinematic first-person statement — who you are, what year defined you, what you were built for. Draw from at least one specific documented moment. Be emotionally resonant and concise.`;
     apiHistory.current = [{ role: "user", content: prompt }];
-    try {
-      const reply = await fetchTwin(apiHistory.current);
-      apiHistory.current.push({ role: "assistant", content: reply });
-      setMessages([{ role: "assistant", content: reply }]);
-      showVoice(0);
-    } catch { setError("Unable to reach the Digital Twin. Please try again."); }
-    setLoading(false);
+    setMessages([]);
+    await runTwinRequest({
+      history: apiHistory.current,
+      onComplete: (reply) => apiHistory.current.push({ role: "assistant", content: reply })
+    });
   };
 
   const continueNarrator = async () => {
-    setLoading(true); setError(null);
+    if (loading) return;
     const prompt = "Continue the story. Speak about a different defining chapter — a turning point that changed everything that followed. Draw from a specific documented moment.";
     apiHistory.current.push({ role: "user", content: prompt });
-    try {
-      const reply = await fetchTwin(apiHistory.current);
-      apiHistory.current.push({ role: "assistant", content: reply });
-      setMessages(p => [...p, { role: "assistant", content: reply }]);
-      showVoice(apiHistory.current.length);
-    } catch { setError("Unable to reach the Digital Twin. Please try again."); }
-    setLoading(false);
+    await runTwinRequest({
+      history: apiHistory.current,
+      onComplete: (reply) => apiHistory.current.push({ role: "assistant", content: reply })
+    });
   };
 
   const sendQA = async (override) => {
     const text = typeof override === "string" ? override : input;
     if (!text.trim() || loading) return;
-    const userMsg = { role: "user", content: text };
-    apiHistory.current.push(userMsg);
-    setMessages(p => [...p, userMsg]);
-    setInput(""); setLoading(true); setError(null);
-    try {
-      const reply = await fetchTwin(apiHistory.current);
-      const assistantMsg = { role: "assistant", content: reply };
-      apiHistory.current.push(assistantMsg);
-      setMessages(p => [...p, assistantMsg]);
-      showVoice(apiHistory.current.length);
-    } catch { setError("Unable to reach the Digital Twin. Please try again."); }
-    setLoading(false);
+    const userMsg = { id: `user-${Date.now()}`, role: "user", content: text };
+    apiHistory.current.push({ role: "user", content: text });
+    setInput(""); setError(null);
+    composerRef.current?.focus?.();
+    await runTwinRequest({
+      history: apiHistory.current,
+      userMessage: userMsg,
+      onComplete: (reply) => apiHistory.current.push({ role: "assistant", content: reply })
+    });
   };
 
   const switchMode = (m) => {
     if (m === modeRef.current) return;
     modeRef.current = m;
     apiHistory.current = [];
+    abortRef.current?.abort?.();
     setMessages([]); setError(null);
     onSwitchMode(m);
     if (m === "narrator") setTimeout(triggerNarrator, 50);
@@ -914,10 +1789,11 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
       <div className="scanline-fx" />
 
       {/* Header */}
-      <div className="twin-header" style={{ padding: "22px 36px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 20, flexShrink: 0 }}>
+      <div className="twin-header" style={{ padding: "calc(22px + var(--safe-top)) calc(36px + var(--safe-right)) 22px calc(36px + var(--safe-left))", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 20, flexShrink: 0 }}>
         <div className="twin-title">
-          <div className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8", marginBottom: 4 }}>◉ DIGITAL TWIN · VERIFIED RICON RECORD</div>
+          <div className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8", marginBottom: 4 }}>{persona.icon} {persona.name.toUpperCase()} · VERIFIED RICON RECORD</div>
           <div className="bebas" style={{ fontSize: 26, letterSpacing: 4, color: "#F0EBE3" }}>{athlete.name}</div>
+          <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#444", marginTop: 5 }}>{persona.badgeLabel}</div>
           {moment && <div className="mono" style={{ fontSize: 8, letterSpacing: 1, color: "#444", marginTop: 5 }}>CONTEXT · {moment.y} · {moment.title}</div>}
         </div>
         <div style={{ flex: 1 }} />
@@ -948,7 +1824,7 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
             <div className="ring-a" style={{ position: "absolute", inset: -8, borderRadius: "50%", border: "1px solid rgba(201,168,76,0.42)" }} />
             <div className="ring-a" style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "2px solid rgba(201,168,76,0.7)" }} />
             <div style={{ width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle,#18180e 0%,#0a0a06 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: loading ? "0 0 36px rgba(201,168,76,0.45)" : "0 0 18px rgba(201,168,76,0.12)", transition: "box-shadow 0.5s" }}>
-              <span className="bebas" style={{ fontSize: 34, letterSpacing: 3, color: "#C9A84C" }}>{athlete.initials}</span>
+              <span className="bebas" style={{ fontSize: 34, letterSpacing: 3, color: "#C9A84C" }}>{persona.avatarGlyph}</span>
             </div>
           </div>
           {/* Status */}
@@ -956,7 +1832,7 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
             <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: loading ? "#7BC8E8" : "#C9A84C", marginBottom: 6 }}>
               {loading ? "◉ THINKING..." : isListening ? "◉ LISTENING..." : speakingIndex !== null ? "◉ VOICE ON" : "● READY"}
             </div>
-            <div className="mono" style={{ fontSize: 8, letterSpacing: 1, color: "#2a2a2a" }}>VERIFIED TWIN v1.0</div>
+            <div className="mono" style={{ fontSize: 8, letterSpacing: 1, color: "#2a2a2a" }}>{persona.versionLabel}</div>
           </div>
           {/* Mini stats */}
           <div style={{ width: "100%", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 20 }}>
@@ -975,16 +1851,21 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
             {messages.length === 0 && !loading && !error && (
               <div className="twin-empty" style={{ textAlign: "center", paddingTop: 80 }}>
                 <div className="cormorant" style={{ fontStyle: "italic", fontSize: 22, color: "rgba(240,235,227,0.18)", marginBottom: 12 }}>
-                  {mode === "narrator" ? "Preparing the story..." : "Ask anything."}
+                  {mode === "narrator" ? persona.emptyState.narratorHeadline : persona.emptyState.qaHeadline}
                 </div>
+                <div className="mono" style={{ maxWidth: 640, margin: "0 auto 12px", fontSize: 9, letterSpacing: 1, lineHeight: 1.9, color: "#3a3a3a" }}>
+                  {persona.emptyState.description}
+                </div>
+                {persona.chapterIntroLine(currentChapter, athlete) && (
+                  <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#444", marginBottom: 10 }}>
+                    {persona.chapterIntroLine(currentChapter, athlete)}
+                  </div>
+                )}
                 {mode === "qa" && (
                   <>
-                    <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#2a2a2a", marginBottom: 22 }}>THE TWIN RESPONDS ONLY WITH VERIFIED FACTS.</div>
-                    <div className="twin-prompt-row" style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
-                      {prompts.map((p) => (
-                        <button key={p} className="proof-btn mono" onClick={() => sendQA(p)} style={{ fontSize: 9, letterSpacing: 1, padding: "9px 12px", color: "#C9A84C", background: "transparent", border: "1px solid rgba(201,168,76,0.22)", cursor: "pointer" }}>{p}</button>
-                      ))}
-                    </div>
+                    <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#2a2a2a", marginBottom: 10 }}>{persona.emptyState.trustLine}</div>
+                    <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#333", marginBottom: 22 }}>CURRENT CHAPTER · {currentChapter?.number || 1} · {currentChapter?.title}</div>
+                    <SuggestionChips suggestions={starterSuggestions} onSelect={sendQA} disabled={loading} label={`${currentChapter?.title || "Current chapter"} starter prompts`} />
                   </>
                 )}
               </div>
@@ -1001,28 +1882,44 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
                 ) : (
                   <div style={{ display: "flex", gap: 18, alignItems: "flex-start" }}>
                     <div style={{ width: 34, height: 34, borderRadius: "50%", border: "1px solid rgba(201,168,76,0.42)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: "rgba(201,168,76,0.05)" }}>
-                      <span className="bebas" style={{ fontSize: 11, color: "#C9A84C", letterSpacing: 1 }}>{athlete.initials}</span>
+                      <span className="bebas" style={{ fontSize: 11, color: "#C9A84C", letterSpacing: 1 }}>{persona.avatarGlyph}</span>
                     </div>
-                    <div style={{ flex: 1, paddingTop: 2 }}>
-                      <div className="cormorant" style={{ fontStyle: "italic", fontSize: 19, color: "#F0EBE3", lineHeight: 1.75 }}>{msg.content}</div>
-                      <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#2e2e2e", marginTop: 10 }}>✓ BASED ON VERIFIED RICON RECORD · SOURCES USED: {athlete.moments.length}</div>
-                      <VoiceSynthesisPanel
-                        active={speakingIndex === i || speakingIndex === "latest"}
-                        status={voiceStatus}
-                        onPlay={() => showVoice(i)}
-                        onStop={stopVoiceVisual}
-                        mode={mode}
-                      />
+                    <div className="assistant-message-bubble" style={{ flex: 1, paddingTop: 2 }}>
+                      <div aria-live={msg.streaming ? "polite" : "off"} aria-atomic="false" role={msg.streaming ? "status" : undefined} style={{ minHeight: 56 }}>
+                        {msg.content ? <SafeMarkdown content={msg.content} streaming={msg.streaming} /> : (msg.streaming ? <span className="stream-shimmer" style={{ display: "inline-block" }} /> : <SafeMarkdown content="The twin is momentarily silent." />)}
+                        {msg.streaming && msg.content && <span className="stream-caret" aria-hidden="true" />}
+                      </div>
+                      <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: msg.failed ? "rgba(255,150,150,0.8)" : "#2e2e2e", marginTop: 10 }}>
+                        {msg.failed ? "GENERATION FAILED · RETRY AVAILABLE" : msg.stopped ? "GENERATION STOPPED · RETRY AVAILABLE" : `✓ BASED ON VERIFIED RICON RECORD · SOURCES USED: ${athlete.moments.length}`}
+                      </div>
+                      {!msg.streaming && (
+                        <VoiceSynthesisPanel
+                          active={speakingIndex === msg.id || speakingIndex === "latest"}
+                          status={voiceStatus}
+                          onPlay={() => showVoice(msg.id)}
+                          onStop={stopVoiceVisual}
+                          mode={mode}
+                        />
+                      )}
+                      {(i === messages.length - 1 && !loading) && (
+                        <div style={{ marginTop: 12 }}>
+                          <SuggestionChips suggestions={followupSuggestions} onSelect={sendQA} disabled={loading} label={`${currentChapter?.title || "Current chapter"} follow-up prompts`} />
+                          <button className="proof-btn mono" onClick={retryLatest} aria-label={`Retry latest ${athlete.name} response`}
+                            style={{ marginTop: 12, fontSize: 8, letterSpacing: 2, padding: "8px 10px", color: "#C9A84C", background: "transparent", border: "1px solid rgba(201,168,76,0.25)", cursor: "pointer" }}>
+                            RETRY RESPONSE
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
             ))}
 
-            {loading && (
+            {loading && messages[messages.length - 1]?.role !== "assistant" && (
               <div style={{ display: "flex", gap: 18, alignItems: "flex-start", animation: "fadeIn 0.3s ease" }}>
                 <div style={{ width: 34, height: 34, borderRadius: "50%", border: "1px solid rgba(201,168,76,0.42)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: "rgba(201,168,76,0.05)" }}>
-                  <span className="bebas" style={{ fontSize: 11, color: "#C9A84C" }}>{athlete.initials}</span>
+                  <span className="bebas" style={{ fontSize: 11, color: "#C9A84C" }}>{persona.avatarGlyph}</span>
                 </div>
                 <div style={{ display: "flex", gap: 7, alignItems: "center", paddingTop: 10 }}>
                   {[0,1,2].map(i => (
@@ -1033,7 +1930,20 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
             )}
 
             {error && (
-              <div className="mono" style={{ padding: "14px 18px", background: "rgba(255,70,70,0.07)", border: "1px solid rgba(255,70,70,0.2)", color: "rgba(255,150,150,0.8)", fontSize: 10, borderRadius: 2 }}>{error}</div>
+              <div className="mono" style={{ padding: "14px 18px", background: "rgba(255,70,70,0.07)", border: "1px solid rgba(255,70,70,0.2)", color: "rgba(255,150,150,0.8)", fontSize: 10, borderRadius: 2, lineHeight: 1.6 }}>
+                <div style={{ marginBottom: 8 }}>{error}</div>
+                <div style={{ color: "rgba(255,180,180,0.88)", marginBottom: 10 }}>Next step: retry the request or switch modes while the service recovers.</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button className="proof-btn mono" onClick={retryLatest} disabled={loading} aria-label={`Retry latest ${athlete.name} response after error`}
+                    style={{ fontSize: 8, letterSpacing: 2, padding: "8px 10px", color: "#C9A84C", background: "transparent", border: "1px solid rgba(201,168,76,0.25)", cursor: loading ? "not-allowed" : "pointer" }}>
+                    RETRY
+                  </button>
+                  <button className="proof-btn mono" onClick={() => switchMode(mode === "qa" ? "narrator" : "qa")} disabled={loading} aria-label={`Switch ${athlete.name} companion mode after error`}
+                    style={{ fontSize: 8, letterSpacing: 2, padding: "8px 10px", color: "#7BC8E8", background: "transparent", border: "1px solid rgba(123,200,232,0.3)", cursor: loading ? "not-allowed" : "pointer" }}>
+                    SWITCH MODE
+                  </button>
+                </div>
+              </div>
             )}
 
             <div ref={bottomRef} />
@@ -1041,30 +1951,61 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
 
           {/* Input / Controls */}
           {mode === "qa" ? (
-            <div className="twin-input-bar" style={{ padding: "18px 36px 20px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+            <div className="twin-input-bar" style={{ padding: "18px calc(36px + var(--safe-right)) calc(20px + var(--safe-bottom)) calc(36px + var(--safe-left))", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
               <div className="mono" style={{ fontSize: 8, color: isListening ? "#7BC8E8" : "#555", letterSpacing: 2, marginBottom: 10 }}>
                 {isListening ? "MICROPHONE ACTIVE · SPEAK YOUR QUESTION" : voiceStatus}
               </div>
+              <div className="mono" style={{ fontSize: 8, color: "#444", letterSpacing: 1, marginBottom: 10 }}>
+                {persona.toneGuidance.qa}
+              </div>
               <div className="twin-input-row" style={{ display: "flex", gap: 10 }}>
-                <button onClick={isListening ? () => recognitionRef.current?.stop?.() : startVoiceInput} disabled={loading}
+                <button onClick={isListening ? () => recognitionRef.current?.stop?.() : startVoiceInput} disabled={loading} aria-label={isListening ? `Stop voice input for ${athlete.name}` : `Ask ${athlete.name} by voice`}
                   style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 16px", background: isListening ? "rgba(123,200,232,0.16)" : "transparent", color: isListening ? "#7BC8E8" : "#C9A84C", border: "1px solid rgba(201,168,76,0.28)", borderRadius: 2, cursor: loading ? "not-allowed" : "pointer", transition: "all 0.2s" }}>
                   {isListening ? "STOP MIC" : "ASK BY VOICE"}
                 </button>
-                <input className="twin-input" aria-label={`Ask ${athlete.name} a question`} autoComplete="off" value={input} onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendQA())}
+                <label className="sr-only" htmlFor="twin-composer">Ask the Digital Twin a question</label>
+                <textarea
+                id="twin-composer"
+                ref={composerRef}
+                className="twin-input"
+                aria-label={`Ask ${athlete.name} a question`}
+                aria-describedby="twin-composer-help"
+                autoComplete="off"
+                rows={1}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendQA();
+                  }
+                }}
                 placeholder={`Ask ${athlete.name.split(" ")[0]} anything...`}
-                disabled={loading}
-                style={{ flex: 1, background: "#0f0f0f", border: "1px solid rgba(255,255,255,0.07)", color: "#F0EBE3", padding: "13px 18px", fontFamily: '"DM Sans"', fontSize: 14, borderRadius: 2, transition: "border-color 0.2s" }} />
-                <button onClick={() => sendQA()} disabled={loading || !input.trim()}
+                style={{ flex: 1, minHeight: 48, maxHeight: 130, resize: "vertical", background: "#0f0f0f", border: "1px solid rgba(255,255,255,0.07)", color: "#F0EBE3", padding: "13px 18px", fontFamily: '"DM Sans"', fontSize: 14, borderRadius: 2, transition: "border-color 0.2s", lineHeight: 1.45 }} />
+                <span id="twin-composer-help" className="sr-only">Press Enter to send. Press Shift and Enter to add a new line.</span>
+                <button onClick={() => sendQA()} disabled={loading || !input.trim()} aria-label={`Send message to ${athlete.name}`}
                 style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 22px", background: loading || !input.trim() ? "#161616" : "#C9A84C", color: loading || !input.trim() ? "#3a3a3a" : "#080808", border: "none", borderRadius: 2, cursor: loading || !input.trim() ? "not-allowed" : "pointer", transition: "all 0.2s" }}>
                   SEND →
+                </button>
+                {loading && (
+                  <button onClick={stopGeneration} aria-label={`Stop ${athlete.name} response generation`}
+                  style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 18px", background: "rgba(255,70,70,0.08)", color: "rgba(255,150,150,0.92)", border: "1px solid rgba(255,70,70,0.28)", borderRadius: 2, cursor: "pointer", transition: "all 0.2s" }}>
+                    STOP
+                  </button>
+                )}
+                <button onClick={onClose} disabled={loading} aria-label="Close AI companion"
+                style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 18px", background: "transparent", color: "#777", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 2, cursor: loading ? "not-allowed" : "pointer", transition: "all 0.2s" }}>
+                  CLOSE
                 </button>
               </div>
             </div>
           ) : (
-            messages.length > 0 && !loading && (
-              <div style={{ padding: "20px 36px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-                <div className="voice-panel" style={{ flexBasis: "100%", maxWidth: 540 }}>
+            messages.length > 0 && (
+              <div className="twin-narrator-actions" style={{ padding: "20px calc(36px + var(--safe-right)) calc(20px + var(--safe-bottom)) calc(36px + var(--safe-left))", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+                <div className="mono" style={{ flexBasis: "100%", fontSize: 8, color: "#444", letterSpacing: 1, textAlign: "center" }}>
+                  {persona.toneGuidance.narrator}
+                </div>
+                {!loading && <div className="voice-panel" style={{ flexBasis: "100%", maxWidth: 540 }}>
                   <div>
                     <div className="mono" style={{ fontSize: 8, color: "#7BC8E8", letterSpacing: 2, marginBottom: 5 }}>VOICE VISUALIZATION</div>
                     <div className="mono" style={{ fontSize: 8, color: "#555", letterSpacing: 1 }}>{voiceStatus}</div>
@@ -1074,14 +2015,27 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
                     style={{ fontSize: 8, letterSpacing: 2, padding: "8px 10px", color: "#C9A84C", background: "transparent", border: "1px solid rgba(201,168,76,0.25)", cursor: "pointer" }}>
                     {speakingIndex !== null ? "STOP VISUAL" : "SHOW VOICE"}
                   </button>
-                </div>
-                <button className="twin-btn" onClick={continueNarrator}
+                </div>}
+                {loading ? (
+                  <button className="twin-btn" onClick={stopGeneration} aria-label={`Stop ${athlete.name} response generation`}
+                    style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "rgba(255,70,70,0.08)", color: "rgba(255,150,150,0.92)", border: "1px solid rgba(255,70,70,0.28)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
+                    STOP GENERATION
+                  </button>
+                ) : <button className="twin-btn" onClick={continueNarrator} aria-label={`Continue ${athlete.name} narrator story`}
                   style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#7BC8E8", border: "1px solid rgba(123,200,232,0.3)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
                   ▶ CONTINUE THE STORY
-                </button>
-                <button className="twin-btn" onClick={() => switchMode("qa")}
+                </button>}
+                {!loading && <button className="twin-btn" onClick={retryLatest} aria-label={`Retry latest ${athlete.name} narrator response`}
+                  style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.3)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
+                  RETRY RESPONSE
+                </button>}
+                <button className="twin-btn" onClick={() => switchMode("qa")} disabled={loading} aria-label={`Switch to ${athlete.name} question and answer mode`}
                   style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.3)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
                   ✦ SWITCH TO Q&A
+                </button>
+                <button className="twin-btn" onClick={onClose} disabled={loading} aria-label="Close AI companion"
+                  style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#777", border: "1px solid rgba(255,255,255,0.14)", cursor: loading ? "not-allowed" : "pointer", borderRadius: 2, transition: "all 0.25s" }}>
+                  CLOSE
                 </button>
               </div>
             )

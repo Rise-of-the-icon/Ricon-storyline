@@ -32,6 +32,21 @@ function fallbackTwinReply(athlete, history = []) {
   return `I am ${athlete.name}. When I look back at ${moment.y}, I see ${moment.title.toLowerCase()} as one of the moments that defined me. ${moment.body} That's the truth I can speak to from the record.`;
 }
 
+async function writeFallbackStream(res, text) {
+  const words = text.split(/(\s+)/);
+  for (const word of words) {
+    res.write(word);
+    await new Promise((resolve) => setTimeout(resolve, /\s+/.test(word) ? 8 : 34));
+  }
+  res.end();
+}
+
+function writeError(res, statusCode, message) {
+  res.statusCode = statusCode;
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.end(message);
+}
+
 function twinApiPlugin() {
   return {
     name: "ricon-twin-api",
@@ -40,9 +55,7 @@ function twinApiPlugin() {
 
       server.middlewares.use("/api/twin", async (req, res) => {
         if (req.method !== "POST") {
-          res.statusCode = 405;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ error: "Method not allowed" }));
+          writeError(res, 405, "Method not allowed. Use POST to generate a Digital Twin response.");
           return;
         }
 
@@ -50,9 +63,12 @@ function twinApiPlugin() {
           const body = await readJson(req);
           const { athlete, system, messages } = body;
 
+          res.setHeader("Content-Type", "text/plain; charset=utf-8");
+          res.setHeader("Cache-Control", "no-cache, no-transform");
+          res.setHeader("X-Accel-Buffering", "no");
+
           if (!env.ANTHROPIC_API_KEY) {
-            res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ text: fallbackTwinReply(athlete, messages) }));
+            await writeFallbackStream(res, fallbackTwinReply(athlete, messages));
             return;
           }
 
@@ -66,22 +82,40 @@ function twinApiPlugin() {
             body: JSON.stringify({
               model: env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
               max_tokens: 1000,
+              stream: true,
               system,
               messages
             })
           });
 
-          const data = await upstream.json();
-          res.statusCode = upstream.status;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({
-            text: data.content?.find((content) => content.type === "text")?.text,
-            error: data.error?.message
-          }));
+          if (!upstream.ok || !upstream.body) {
+            const data = await upstream.json().catch(() => ({}));
+            writeError(res, upstream.status, data.error?.message || "The Digital Twin provider rejected the request.");
+            return;
+          }
+
+          const reader = upstream.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const events = buffer.split("\n\n");
+            buffer = events.pop() || "";
+
+            for (const event of events) {
+              const dataLine = event.split("\n").find((line) => line.startsWith("data: "));
+              if (!dataLine) continue;
+              const data = JSON.parse(dataLine.slice(6));
+              const text = data.type === "content_block_delta" && data.delta?.type === "text_delta" ? data.delta.text : "";
+              if (text) res.write(text);
+            }
+          }
+          res.end();
         } catch (error) {
-          res.statusCode = 500;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ error: error.message }));
+          writeError(res, 500, error.message || "Unable to stream the Digital Twin response.");
         }
       });
     }
