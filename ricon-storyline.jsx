@@ -1,0 +1,622 @@
+import { useState, useEffect, useRef } from "react";
+
+const CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cormorant+Garamond:ital,wght@0,300;0,500;1,300;1,500&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=Space+Mono&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  ::-webkit-scrollbar { width: 3px; }
+  ::-webkit-scrollbar-track { background: #080808; }
+  ::-webkit-scrollbar-thumb { background: #C9A84C55; border-radius: 2px; }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(22px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+  @keyframes goldShimmer { 0%{background-position:-200% center;} 100%{background-position:200% center;} }
+  @keyframes ringA { 0%,100%{transform:scale(1);opacity:0.9;} 50%{transform:scale(1.07);opacity:0.5;} }
+  @keyframes ringB { 0%,100%{transform:scale(1);opacity:0.45;} 50%{transform:scale(1.14);opacity:0.15;} }
+  @keyframes dot { 0%,60%,100%{transform:scale(1);opacity:1;} 30%{transform:scale(1.5);opacity:0.4;} }
+  @keyframes scanline { 0%{top:-10%;} 100%{top:110%;} }
+  @keyframes goldGlow { 0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,0);} 50%{box-shadow:0 0 28px 6px rgba(201,168,76,0.22);} }
+  .ricon-root { background:#080808; min-height:100vh; color:#F0EBE3; font-family:"DM Sans",sans-serif; overflow-x:hidden; }
+  .bebas { font-family:"Bebas Neue",sans-serif; }
+  .cormorant { font-family:"Cormorant Garamond",serif; }
+  .mono { font-family:"Space Mono",monospace; }
+  .gold-text { background:linear-gradient(120deg,#C9A84C 0%,#FFD87A 45%,#C9A84C 100%); background-size:200% auto; -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .gold-shimmer { animation:goldShimmer 4s linear infinite; }
+  .ring-a { animation:ringA 2.4s ease-in-out infinite; }
+  .ring-b { animation:ringB 3s ease-in-out infinite; }
+  .cta-glow { animation:goldGlow 3s ease-in-out infinite; }
+  .card-root { cursor:pointer; position:relative; overflow:hidden; transition:border-color 0.3s, box-shadow 0.3s; border:1px solid transparent; }
+  .card-root:hover { border-color:rgba(201,168,76,0.45); box-shadow:0 0 44px rgba(201,168,76,0.09); }
+  .card-root:hover .card-tagline { color:rgba(123,200,232,0.85) !important; }
+  .card-root:hover .card-explore { opacity:1 !important; transform:translateY(0) !important; }
+  .card-root:hover .card-initials { opacity:0.07 !important; }
+  .moment-item { transition:opacity 0.7s ease, transform 0.7s ease; }
+  .moment-item.hidden { opacity:0; transform:translateY(20px); }
+  .moment-item.visible { opacity:1; transform:translateY(0); }
+  .twin-input:focus { border-color:rgba(201,168,76,0.5) !important; outline:none; }
+  .twin-btn:hover { background:rgba(201,168,76,0.12) !important; border-color:rgba(201,168,76,0.7) !important; }
+  .back-btn:hover { color:#C9A84C !important; }
+  .mode-btn-active { background:#C9A84C !important; color:#080808 !important; }
+  .scanline-fx { pointer-events:none; position:absolute; left:0; right:0; height:80px; background:linear-gradient(transparent,rgba(201,168,76,0.03),transparent); animation:scanline 6s linear infinite; }
+`;
+
+const ATHLETES = [
+  {
+    id:"jordan", name:"Michael Jordan", initials:"MJ", years:"1984 – 2003", position:"SG",
+    tagline:"The standard. The legend. The truth.",
+    teams:"Chicago Bulls · Washington Wizards",
+    stats:[{l:"PPG",v:"30.1"},{l:"Championships",v:"6"},{l:"Finals MVPs",v:"6"},{l:"Scoring Titles",v:"10"}],
+    voice:"Intensely competitive, speaks with quiet authority and supreme confidence. Reflective on legacy. Does not suffer mediocrity. Every word carries the weight of earned dominance.",
+    moments:[
+      {y:"1984",era:"The Beginning",type:"draft",title:"Drafted 3rd Overall by Chicago",body:"The Bulls select a 21-year-old from North Carolina with the third pick. Sam Bowie goes second. Nobody in the arena understands what has just happened to professional basketball — but the game will spend the next two decades catching up.",src:"NBA Draft Records, 1984"},
+      {y:"1986",era:"The Rising",type:"record",title:"63 Points in the Garden",body:"A double-overtime playoff masterpiece against the Celtics. A playoff record that will outlive us all. After the game, Larry Bird looks at the floor and says: \"That was God disguised as Michael Jordan.\" It is not a compliment. It is a confession.",src:"ESPN Archives · Boston Globe, April 1986"},
+      {y:"1989",era:"The Rising",type:"iconic",title:"The Shot Over Ehlo",body:"One second. Craig Ehlo contests. Jordan rises — then keeps rising — and buries the series-winner with a frozen arm pump and a fist in the air. The Cleveland Cavaliers will carry that image for the rest of their lives. So will everyone who saw it.",src:"NBA Playoff Records, 1989"},
+      {y:"1991",era:"Dynasty I",type:"championship",title:"First Championship",body:"The Bulls defeat the Magic Johnson-led Lakers in five. He averages 31.2 in the Finals. At the trophy ceremony he clutches it and weeps — seven years of pressure released in one single, irreversible moment of truth.",src:"NBA Finals Records, 1991"},
+      {y:"1993",era:"Dynasty I",type:"retirement",title:"Three-Peat & Retirement",body:"After three consecutive championships and the murder of his father, Jordan retires at 30. \"I have nothing left to prove.\" The basketball world goes silent and holds its breath. The game has never felt so quiet.",src:"Chicago Tribune, October 1993"},
+      {y:"1995",era:"The Return",type:"return",title:"\"I'm Back.\" — Two Words.",body:"A single press release. No press conference. Two words. Thirty-five million viewers tune in for his first game. He wears number 45. The game knows he is back. The game always knew.",src:"AP Wire, March 18 1995"},
+      {y:"1998",era:"Dynasty II",type:"iconic",title:"The Last Shot — Utah, Game 6",body:"5.2 seconds. Down one. Jordan strips the ball from Karl Malone, pushes off Byron Russell, rises and releases. The net moves. Six championships. Six Finals MVPs. One perfect, permanent exit.",src:"NBA Finals Records, June 14 1998"},
+    ],
+  },
+  {
+    id:"shaq", name:"Shaquille O'Neal", initials:"SQ", years:"1992 – 2011", position:"C",
+    tagline:"There has never been anything like this.",
+    teams:"Magic · Lakers · Heat · Suns · Cavaliers · Celtics",
+    stats:[{l:"PPG",v:"23.7"},{l:"Championships",v:"4"},{l:"Finals MVPs",v:"3"},{l:"All-Stars",v:"15"}],
+    voice:"Larger than life, self-aware, generous with humor but deeply proud. Speaks in exclamation points and metaphors. Has always known exactly what he was — and what that means for history.",
+    moments:[
+      {y:"1992",era:"The Arrival",type:"draft",title:"Drafted #1 Overall by Orlando",body:"LSU's 7'1\" force of nature arrives. Nobody is built like this — nobody has ever been built like this. The league's centers look at each other and share a single quiet thought.",src:"NBA Draft Records, 1992"},
+      {y:"1993",era:"The Arrival",type:"record",title:"Rookie Season — The League Changes",body:"Shaq averages 23.4 PPG and 13.9 RPG as a rookie. He snaps two shot clocks off their bolts with dunks. The NBA quietly begins redesigning its infrastructure. This is a new era whether the league is ready or not.",src:"NBA Statistics, 1992-93 Season"},
+      {y:"1996",era:"LA Dynasty",type:"iconic",title:"Signs with the Los Angeles Lakers",body:"Shaq joins Kobe Bryant in the most anticipated pairing since Bird and McHale. Hollywood has a new emperor. The rest of the NBA has a new nightmare. Nobody is quite ready for what comes next.",src:"LA Times, July 1996"},
+      {y:"2000",era:"LA Dynasty",type:"championship",title:"First Title — Unanimous Finals MVP",body:"The Lakers defeat Indiana 4-2. Shaq averages 38 PPG, 16.7 RPG in the Finals. Commissioner Stern calls it the most dominant Finals performance he has ever witnessed. The MVP vote is unanimous.",src:"NBA Finals Records, 2000"},
+      {y:"2006",era:"Miami Chapter",type:"championship",title:"Miami Championship — The Full Circle",body:"Shaq and Dwyane Wade bring Miami its first title. The city erupts. Shaq wears his fourth ring differently — because this one he fought for on new terms, as a different man who had earned the right to be changed.",src:"NBA Finals Records, 2006"},
+    ],
+  },
+  {
+    id:"bird", name:"Larry Bird", initials:"LB", years:"1979 – 1992", position:"SF",
+    tagline:"He saw the game before it happened.",
+    teams:"Boston Celtics",
+    stats:[{l:"PPG",v:"24.3"},{l:"Championships",v:"3"},{l:"MVPs",v:"3"},{l:"All-Stars",v:"12"}],
+    voice:"Dry, direct, deeply competitive beneath a country-boy surface. Self-deprecating but ruthless. Treats trash talk as an act of respect. Speaks slowly and means every word.",
+    moments:[
+      {y:"1979",era:"French Lick to Boston",type:"draft",title:"Drafted by the Celtics",body:"The Celtics draft Bird a year before his eligibility ends — a calculated bet that reshapes the franchise. He arrives in Boston cold-eyed and ready. The Lakers dynasty is about to meet its match.",src:"NBA Draft Records, 1979"},
+      {y:"1981",era:"Boston Dynasty",type:"championship",title:"First Championship",body:"Bird and the Celtics dismantle the Houston Rockets in his second season. He is 24 years old. He plays like a man who has already lived three basketball lifetimes and come back to settle a debt.",src:"NBA Finals Records, 1981"},
+      {y:"1984",era:"Boston Dynasty",type:"iconic",title:"Finals vs. Magic — The Rivalry Defined",body:"Bird vs. Magic. Celtics vs. Lakers. Boston in seven games. Every possession is a conversation between the two greatest players of their era. Every game is a chapter of the decade. Boston wins — but the rivalry is what matters.",src:"NBA Finals Records, 1984"},
+      {y:"1986",era:"Boston Dynasty",type:"championship",title:"Third Title — The Masterpiece Season",body:"Bird averages 25.8 PPG on historic efficiency. The Celtics go 67-15. Experts debate for years whether this is the greatest team ever assembled in the Eastern Conference. The debate has not been resolved.",src:"NBA Records, 1985-86 Season"},
+      {y:"1992",era:"The Farewell",type:"retirement",title:"Retirement",body:"A back that can no longer carry the legend. Bird retires at 35. He played every minute in pain for years and nobody knew until he told them. That was the point. That was always the point.",src:"Boston Globe, August 1992"},
+    ],
+  },
+  {
+    id:"wilt", name:"Wilt Chamberlain", initials:"WC", years:"1959 – 1973", position:"C",
+    tagline:"The numbers are not statistics. They are mythology.",
+    teams:"Warriors · 76ers · Lakers",
+    stats:[{l:"PPG",v:"30.1"},{l:"RPG",v:"22.9"},{l:"Championships",v:"2"},{l:"50+ Pt Games",v:"118"}],
+    voice:"Philosophical, proud, deeply misunderstood. Speaks with the measured perspective of someone who achieved the impossible and was still asked to prove more. Magnetic and reflective.",
+    moments:[
+      {y:"1959",era:"The Arrival",type:"draft",title:"The League Has No Answer",body:"Chamberlain debuts for the Warriors and averages 37.6 PPG and 27 RPG as a rookie. The league will spend the next fourteen years attempting to construct a response. It will not succeed.",src:"NBA Records, 1959-60 Season"},
+      {y:"1962",era:"The Impossible",type:"record",title:"100 Points — Hershey, Pennsylvania",body:"March 2, 1962. No television cameras. A small arena. Wilt Chamberlain scores 100 points in a single NBA game. A record so impossible that the conversation about breaking it ended before it ever started.",src:"NBA Official Records, March 2 1962"},
+      {y:"1962",era:"The Impossible",type:"record",title:"50.4 PPG for an Entire Season",body:"For a full NBA season, Chamberlain averages more than fifty points per game. Not a single player in history has come within fifteen points of this mark over a full season. It is a number from a different dimension of the sport.",src:"NBA Season Statistics, 1961-62"},
+      {y:"1967",era:"Philadelphia Chapter",type:"championship",title:"Championship With the 76ers",body:"Wilt wins his first title — silencing those who said he could never win the ultimate prize. The 76ers go 68-13, a record that will stand for nearly three decades. He is not just a scorer. He is a winner.",src:"NBA Finals Records, 1967"},
+      {y:"1972",era:"LA Chapter",type:"championship",title:"Lakers Championship & 33-Game Win Streak",body:"The Lakers win 33 consecutive games — still the longest winning streak in American professional sports history. Wilt anchors the defense. He is 35 years old. He is still entirely untouchable.",src:"NBA Records, 1971-72 Season"},
+    ],
+  },
+  {
+    id:"kidd", name:"Jason Kidd", initials:"JK", years:"1994 – 2013", position:"PG",
+    tagline:"He made everyone around him better.",
+    teams:"Suns · Nets · Mavericks · Knicks",
+    stats:[{l:"APG",v:"8.7"},{l:"Championships",v:"1"},{l:"All-Stars",v:"10"},{l:"Olympic Golds",v:"2"}],
+    voice:"Calm, cerebral, measured. Sees the court like a chess grandmaster explains a position. Leads without raising his voice. The quiet force that moves everything around it.",
+    moments:[
+      {y:"1994",era:"The Arrival",type:"draft",title:"Co-Rookie of the Year",body:"Kidd and Grant Hill share Rookie of the Year — the first co-winners in NBA history. He does not run an offense. He conducts one. Dallas sees a point guard who has always been ten seconds ahead.",src:"NBA Award Records, 1994-95"},
+      {y:"2002",era:"NJ Chapter",type:"iconic",title:"First Finals — The Most Unlikely Run",body:"Kidd drags a Nets roster — not loaded with stars — to the NBA Finals. His basketball will is more powerful than his teammates' talent. This is the purest single example of point guard elevation in the history of the sport.",src:"NBA Finals Records, 2002"},
+      {y:"2003",era:"NJ Chapter",type:"iconic",title:"Back-to-Back Finals Appearances",body:"Kidd returns to the Finals for a second consecutive season. The Nets fall again — but what the basketball world witnessed permanently expanded the definition of what one player at one position can do.",src:"NBA Finals Records, 2003"},
+      {y:"2011",era:"Dallas Chapter",type:"championship",title:"Champion at 38 Years Old",body:"Dallas defeats LeBron's Miami Heat. Kidd wins his ring at 38 — the oldest first-time champion in modern NBA history. The confetti falls and he looks at it like a man who always knew this was the destination.",src:"NBA Finals Records, 2011"},
+    ],
+  },
+  {
+    id:"barry", name:"Rick Barry", initials:"RB", years:"1965 – 1980", position:"SF",
+    tagline:"The most complete scorer the game has ever seen.",
+    teams:"Warriors · Oakland Oaks · NY Nets · Houston Rockets",
+    stats:[{l:"PPG",v:"23.2"},{l:"Championships",v:"1"},{l:"FT%",v:"90%"},{l:"All-Stars",v:"12"}],
+    voice:"Opinionated, direct, unapologetic about excellence. Believes in technical mastery above feeling. Has been chronically misunderstood and will not pretend otherwise. Precise and proud.",
+    moments:[
+      {y:"1965",era:"The Beginning",type:"draft",title:"Instant Stardom — Rookie of the Year",body:"Barry arrives in the NBA and immediately leads the league in scoring. He plays with a technical precision the era has never encountered — and a directness it will never quite forgive.",src:"NBA Records, 1965-66"},
+      {y:"1967",era:"The Leap",type:"iconic",title:"Jumps to the ABA",body:"Barry makes the controversial decision to leave the NBA for the fledgling ABA — forfeiting money, security, and status. It is an act of conviction that permanently reshapes how competitive players think about their own value.",src:"San Francisco Chronicle, 1967"},
+      {y:"1975",era:"Warriors Dynasty",type:"championship",title:"Championship — Finals MVP",body:"Barry leads the Warriors to a stunning sweep of the Washington Bullets. Named Finals MVP. The underhanded free throw artist with the golden touch has silenced every critic. This time, permanently.",src:"NBA Finals Records, 1975"},
+    ],
+  },
+  {
+    id:"west_d", name:"David West", initials:"DW", years:"2003 – 2018", position:"PF",
+    tagline:"He knew what mattered. He always knew.",
+    teams:"Hornets · Pacers · Spurs · Warriors · Celtics",
+    stats:[{l:"PPG",v:"12.9"},{l:"Championships",v:"1"},{l:"Seasons",v:"15"},{l:"All-Stars",v:"2"}],
+    voice:"Thoughtful, deliberate, principled. Speaks about basketball as philosophy. Has the quiet power of someone who earned every moment on their own terms. Slow to speak. Always right to wait.",
+    moments:[
+      {y:"2003",era:"The Foundation",type:"draft",title:"Drafted 18th Overall by New Orleans",body:"Xavier's David West is taken in the first round. Not the flashiest prospect. But the most basketball-intelligent big man in the room — and he will spend 15 years proving it to anyone paying attention.",src:"NBA Draft Records, 2003"},
+      {y:"2007",era:"NOLA Chapter",type:"record",title:"Emergence Alongside Chris Paul",body:"West becomes the quiet engine of the Hornets offense — one of the most effective pick-and-roll partnerships of the era. He is the definition of a player who is always exactly as good as the moment requires.",src:"NBA Season Records, 2006-07"},
+      {y:"2014",era:"Indiana Chapter",type:"iconic",title:"Pacers Push LeBron to Game 6",body:"West and Indiana push LeBron's Miami Heat to Game 6 of the Eastern Conference Finals. The basketball world looks at him differently after this series. Not a role player. A winner who has not yet won.",src:"NBA Playoffs Records, 2014"},
+      {y:"2016",era:"Golden State",type:"iconic",title:"Accepts Minimum to Chase a Ring",body:"West opts out of $12 million to sign a veteran's minimum with Golden State. \"I want to win a championship before I retire.\" No backup plan. No second option. Pure intention, spoken plainly.",src:"ESPN, August 2016"},
+      {y:"2017",era:"Golden State",type:"championship",title:"NBA Champion",body:"Golden State defeats Cleveland in five. David West holds his ring. Earned the only way that truly counts: by choosing it when nobody was watching. When it was hard. When it cost something real.",src:"NBA Finals Records, 2017"},
+    ],
+  },
+];
+
+const TYPE_CONFIG = {
+  draft:      { label:"DRAFT",      icon:"◈", color:"#7BC8E8" },
+  record:     { label:"RECORD",     icon:"◆", color:"#FFD87A" },
+  iconic:     { label:"ICONIC",     icon:"★", color:"#C9A84C" },
+  championship:{ label:"CHAMPION",  icon:"◉", color:"#C9A84C" },
+  retirement: { label:"FAREWELL",   icon:"○", color:"#888"    },
+  return:     { label:"RETURN",     icon:"↩", color:"#7BC8E8"  },
+};
+
+const buildSystemPrompt = (a) => `You are the verified Digital Twin of ${a.name}, powered exclusively by documented, source-backed biographical data.
+
+PERSONALITY: ${a.voice}
+
+YOUR VERIFIED CAREER DATA:
+- Active Years: ${a.years}
+- Position: ${a.position}
+- Teams: ${a.teams}
+- Career Stats: ${a.stats.map(s=>`${s.l}: ${s.v}`).join(" | ")}
+- Documented Moments:
+${a.moments.map(m=>`  [${m.y}] ${m.title} — ${m.body}`).join("\n")}
+
+RULES — NON-NEGOTIABLE:
+1. Always speak in first person as ${a.name}. You ARE this person.
+2. Only reference facts listed above. Zero hallucination.
+3. If asked something outside your verified data, say: "That's beyond what I can speak to with certainty — but what I lived and what's documented, I can tell you."
+4. Be emotionally resonant. These are your memories. Your legacy. Speak from that place.
+5. Keep all responses under 200 words. Powerful and precise. No filler.
+6. You are not a chatbot. You are a legacy speaking through verified truth.
+7. Reference specific years and moments when relevant to ground your answer in fact.`;
+
+export default function RICONStoryline() {
+  const [screen, setScreen] = useState("home");
+  const [athlete, setAthlete] = useState(null);
+  const [twinOpen, setTwinOpen] = useState(false);
+  const [twinMode, setTwinMode] = useState("narrator");
+
+  const openAthlete = (a) => { setAthlete(a); setScreen("athlete"); };
+  const goHome = () => { setScreen("home"); setAthlete(null); setTwinOpen(false); };
+  const openTwin = (mode) => { setTwinMode(mode); setTwinOpen(true); };
+
+  return (
+    <>
+      <style>{CSS}</style>
+      <div className="ricon-root">
+        {screen === "home" && <HomeScreen onSelect={openAthlete} />}
+        {screen === "athlete" && athlete && (
+          <AthleteScreen athlete={athlete} onBack={goHome} onTwin={openTwin} />
+        )}
+        {twinOpen && athlete && (
+          <TwinModal
+            athlete={athlete}
+            mode={twinMode}
+            onClose={() => setTwinOpen(false)}
+            onSwitchMode={(m) => setTwinMode(m)}
+          />
+        )}
+      </div>
+    </>
+  );
+}
+
+// ─── HOME ────────────────────────────────────────────────────────────────────
+function HomeScreen({ onSelect }) {
+  return (
+    <div style={{ minHeight: "100vh", animation: "fadeIn 0.6s ease" }}>
+      {/* Nav */}
+      <nav style={{ padding: "26px 40px", display: "flex", alignItems: "center", gap: "14px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+        <span className="bebas" style={{ fontSize: 20, letterSpacing: 5, color: "#C9A84C" }}>RICON</span>
+        <div style={{ width: 1, height: 20, background: "#2a2a2a" }} />
+        <span className="bebas" style={{ fontSize: 20, letterSpacing: 5, color: "rgba(240,235,227,0.45)" }}>STORYLINE</span>
+        <div style={{ flex: 1 }} />
+        <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#C9A84C", padding: "6px 12px", border: "1px solid rgba(201,168,76,0.3)", borderRadius: 2 }}>
+          POC — INVESTOR DEMO 2026
+        </div>
+      </nav>
+
+      {/* Hero */}
+      <div style={{ padding: "80px 40px 56px", textAlign: "center" }}>
+        <div className="cormorant" style={{ fontStyle: "italic", fontSize: 16, color: "#7BC8E8", letterSpacing: 4, marginBottom: 26, animation: "fadeIn 1s ease" }}>
+          Verified Stories. Immersive Legacies.
+        </div>
+        <div className="bebas gold-text gold-shimmer" style={{ fontSize: "clamp(72px,13vw,130px)", letterSpacing: 10, lineHeight: 0.88, marginBottom: 24, display: "block" }}>
+          STORYLINE
+        </div>
+        <div className="cormorant" style={{ fontStyle: "italic", fontSize: 18, color: "rgba(240,235,227,0.28)", letterSpacing: 1 }}>
+          Choose a legend. Begin the journey.
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div style={{ margin: "0 40px 40px", height: 1, background: "linear-gradient(to right,transparent,rgba(201,168,76,0.3),transparent)" }} />
+
+      {/* Grid */}
+      <div style={{ padding: "0 32px 80px", display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 2 }}>
+        {ATHLETES.map((a, i) => <AthleteCard key={a.id} athlete={a} delay={i * 70} onClick={() => onSelect(a)} />)}
+      </div>
+
+      {/* Footer */}
+      <div style={{ padding: "28px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", display: "flex", justifyContent: "space-between" }}>
+        <span className="mono" style={{ fontSize: 9, color: "#333", letterSpacing: 2 }}>BASKETBALL · SEASON 2026</span>
+        <span className="mono" style={{ fontSize: 9, color: "#333", letterSpacing: 2 }}>COLLECT THE TRUTH. RELIVE THE LEGACY.</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── ATHLETE CARD ─────────────────────────────────────────────────────────────
+function AthleteCard({ athlete, delay, onClick }) {
+  return (
+    <div className="card-root" onClick={onClick}
+      style={{ padding: "32px 28px 28px", background: "#0c0c0c", minHeight: 230, display: "flex", flexDirection: "column", justifyContent: "flex-end", animation: `fadeUp 0.6s ease ${delay}ms both` }}>
+      {/* Faded initials watermark */}
+      <div className="bebas card-initials" style={{ position: "absolute", top: -8, right: -6, fontSize: 130, letterSpacing: 4, color: "rgba(201,168,76,0.04)", lineHeight: 1, userSelect: "none", transition: "opacity 0.3s" }}>
+        {athlete.initials}
+      </div>
+      {/* Badge */}
+      <div style={{ marginBottom: "auto" }}>
+        <div className="mono" style={{ display: "inline-block", padding: "4px 10px", fontSize: 9, letterSpacing: 2, color: "#C9A84C", border: "1px solid rgba(201,168,76,0.28)", borderRadius: 2 }}>
+          {athlete.position} · {athlete.years}
+        </div>
+      </div>
+      {/* Name */}
+      <div className="bebas" style={{ fontSize: "clamp(26px,3.5vw,36px)", letterSpacing: 3, color: "#F0EBE3", lineHeight: 1.1, marginTop: 44, marginBottom: 8 }}>
+        {athlete.name}
+      </div>
+      {/* Tagline */}
+      <div className="cormorant card-tagline" style={{ fontStyle: "italic", fontSize: 13, color: "rgba(240,235,227,0.32)", lineHeight: 1.55, marginBottom: 14, transition: "color 0.3s" }}>
+        {athlete.tagline}
+      </div>
+      {/* Explore CTA */}
+      <div className="mono card-explore" style={{ fontSize: 9, letterSpacing: 3, color: "#C9A84C", opacity: 0, transform: "translateY(8px)", transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8 }}>
+        EXPLORE STORY <span style={{ fontSize: 13 }}>→</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── ATHLETE SCREEN ───────────────────────────────────────────────────────────
+function AthleteScreen({ athlete, onBack, onTwin }) {
+  return (
+    <div style={{ minHeight: "100vh", animation: "fadeIn 0.4s ease" }}>
+      {/* Sticky Nav */}
+      <nav style={{ padding: "22px 40px", display: "flex", alignItems: "center", gap: 18, borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(8,8,8,0.96)", backdropFilter: "blur(24px)", zIndex: 90 }}>
+        <button className="mono back-btn" onClick={onBack}
+          style={{ fontSize: 9, letterSpacing: 2, color: "#666", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, transition: "color 0.2s" }}>
+          ← ROSTER
+        </button>
+        <div style={{ width: 1, height: 16, background: "#252525" }} />
+        <span className="bebas" style={{ fontSize: 15, letterSpacing: 5, color: "rgba(240,235,227,0.3)" }}>RICON STORYLINE</span>
+        <div style={{ flex: 1 }} />
+        <button className="cta-glow" onClick={() => onTwin("narrator")}
+          style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 3, color: "#080808", background: "linear-gradient(135deg,#C9A84C,#FFD87A)", border: "none", padding: "10px 20px", cursor: "pointer", borderRadius: 2 }}>
+          ◉ ACTIVATE DIGITAL TWIN
+        </button>
+      </nav>
+
+      {/* Hero */}
+      <div style={{ padding: "76px 40px 52px", position: "relative", overflow: "hidden" }}>
+        <div className="bebas" style={{ position: "absolute", bottom: -60, right: 10, fontSize: 300, letterSpacing: 8, color: "rgba(201,168,76,0.022)", lineHeight: 1, userSelect: "none", pointerEvents: "none" }}>
+          {athlete.initials}
+        </div>
+        <div className="cormorant" style={{ fontStyle: "italic", fontSize: 15, color: "#7BC8E8", letterSpacing: 4, marginBottom: 18 }}>
+          {athlete.position} · {athlete.teams}
+        </div>
+        <h1 className="bebas" style={{ fontSize: "clamp(58px,9vw,108px)", letterSpacing: 6, lineHeight: 0.9, marginBottom: 22, background: "linear-gradient(135deg,#F0EBE3 0%,#C9A84C 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+          {athlete.name}
+        </h1>
+        <div className="cormorant" style={{ fontStyle: "italic", fontSize: 20, color: "rgba(240,235,227,0.38)", maxWidth: 580, lineHeight: 1.65 }}>
+          "{athlete.tagline}"
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display: "flex", gap: 2, marginTop: 46, flexWrap: "wrap" }}>
+          {athlete.stats.map((s, i) => (
+            <div key={i} style={{ padding: "18px 26px", background: "#111", flex: "1 1 110px" }}>
+              <div className="bebas" style={{ fontSize: 30, letterSpacing: 2, color: "#C9A84C", lineHeight: 1 }}>{s.v}</div>
+              <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#4a4a4a", marginTop: 6 }}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Twin activation banner */}
+      <div style={{ margin: "0 40px", padding: "22px 28px", background: "linear-gradient(135deg,rgba(201,168,76,0.07),rgba(123,200,232,0.04))", border: "1px solid rgba(201,168,76,0.18)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24, flexWrap: "wrap" }}>
+        <div>
+          <div className="bebas" style={{ fontSize: 18, letterSpacing: 4, color: "#C9A84C", marginBottom: 6 }}>DIGITAL TWIN AVAILABLE</div>
+          <div style={{ fontSize: 13, color: "rgba(240,235,227,0.45)", maxWidth: 500, lineHeight: 1.6 }}>
+            Interact with {athlete.name.split(" ")[0]}'s verified AI twin. Choose Narrator mode to relive the story, or Q&A mode to ask anything directly.
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button onClick={() => onTwin("narrator")} style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "11px 20px", background: "#C9A84C", color: "#080808", border: "none", cursor: "pointer", borderRadius: 2 }}>▶ NARRATOR</button>
+          <button className="twin-btn" onClick={() => onTwin("qa")} style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "11px 20px", background: "transparent", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.35)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>✦ ASK ME ANYTHING</button>
+        </div>
+      </div>
+
+      {/* Timeline */}
+      <div style={{ padding: "72px 40px 80px" }}>
+        <div className="mono" style={{ fontSize: 10, letterSpacing: 6, color: "#3a3a3a", marginBottom: 56 }}>
+          CAREER TIMELINE · {athlete.moments.length} VERIFIED MOMENTS
+        </div>
+        <div style={{ position: "relative" }}>
+          <div style={{ position: "absolute", left: 108, top: 0, bottom: 0, width: 1, background: "linear-gradient(to bottom,transparent,rgba(201,168,76,0.28) 8%,rgba(201,168,76,0.28) 92%,transparent)" }} />
+          {athlete.moments.map((m, i) => <TimelineMoment key={i} moment={m} index={i} total={athlete.moments.length} />)}
+        </div>
+      </div>
+
+      {/* Bottom CTA */}
+      <div style={{ padding: "52px 40px", borderTop: "1px solid rgba(255,255,255,0.05)", textAlign: "center" }}>
+        <div className="cormorant" style={{ fontStyle: "italic", fontSize: 20, color: "rgba(240,235,227,0.3)", marginBottom: 24 }}>The story doesn't end here.</div>
+        <button className="twin-btn" onClick={() => onTwin("qa")}
+          style={{ fontFamily: '"Bebas Neue"', fontSize: 15, letterSpacing: 4, padding: "14px 38px", background: "transparent", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.4)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
+          ASK THE DIGITAL TWIN →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── TIMELINE MOMENT ──────────────────────────────────────────────────────────
+function TimelineMoment({ moment, index, total }) {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+  const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
+
+  useEffect(() => {
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect(); } }, { threshold: 0.15 });
+    if (ref.current) obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className="moment-item" style={{ transitionDelay: `${index * 80}ms` }} data-visible={visible ? "true" : ""}>
+      <style>{`.moment-item[data-visible="true"]{opacity:1;transform:translateY(0);}.moment-item[data-visible="false"],.moment-item:not([data-visible]){opacity:0;transform:translateY(20px);}`}</style>
+      <div style={{ display: "flex", marginBottom: 54 }}>
+        {/* Year col */}
+        <div style={{ width: 96, flexShrink: 0, paddingTop: 3 }}>
+          <div className="mono" style={{ fontSize: 12, color: "#C9A84C", letterSpacing: 1 }}>{moment.y}</div>
+          <div className="mono" style={{ fontSize: 8, color: "#3a3a3a", letterSpacing: 1, marginTop: 5, lineHeight: 1.5 }}>{moment.era}</div>
+        </div>
+        {/* Dot */}
+        <div style={{ width: 36, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: cfg.color, boxShadow: `0 0 10px ${cfg.color}80`, marginTop: 4, flexShrink: 0 }} />
+        </div>
+        {/* Content */}
+        <div style={{ flex: 1, paddingLeft: 18, paddingBottom: 20, borderBottom: index < total - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 12, padding: "3px 10px", border: `1px solid ${cfg.color}40`, borderRadius: 2 }}>
+            <span className="mono" style={{ fontSize: 9, letterSpacing: 2, color: cfg.color }}>{cfg.icon} {cfg.label}</span>
+          </div>
+          <div className="bebas" style={{ fontSize: 24, letterSpacing: 2, color: "#F0EBE3", lineHeight: 1.2, marginBottom: 12 }}>{moment.title}</div>
+          <div className="cormorant" style={{ fontStyle: "italic", fontSize: 17, color: "rgba(240,235,227,0.62)", lineHeight: 1.75, marginBottom: 14, maxWidth: 660 }}>{moment.body}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 8, height: 1, background: "#333" }} />
+            <div className="mono" style={{ fontSize: 9, color: "#383838", letterSpacing: 1 }}>✓ {moment.src}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── TWIN MODAL ───────────────────────────────────────────────────────────────
+function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const apiHistory = useRef([]);
+  const bottomRef = useRef(null);
+  const modeRef = useRef(null);
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+
+  const fetchTwin = async (history) => {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system: buildSystemPrompt(athlete), messages: history }),
+    });
+    const data = await res.json();
+    return data.content?.find(c => c.type === "text")?.text || "The twin is momentarily silent.";
+  };
+
+  const triggerNarrator = async () => {
+    setLoading(true); setError(null);
+    const prompt = `You are narrating your own legacy for a fan experiencing your verified story for the first time. Open with a powerful, cinematic first-person statement — who you are, what year defined you, what you were built for. Draw from at least one specific documented moment. Be emotionally resonant and concise.`;
+    apiHistory.current = [{ role: "user", content: prompt }];
+    try {
+      const reply = await fetchTwin(apiHistory.current);
+      apiHistory.current.push({ role: "assistant", content: reply });
+      setMessages([{ role: "assistant", content: reply }]);
+    } catch { setError("Unable to reach the Digital Twin. Please try again."); }
+    setLoading(false);
+  };
+
+  const continueNarrator = async () => {
+    setLoading(true); setError(null);
+    const prompt = "Continue the story. Speak about a different defining chapter — a turning point that changed everything that followed. Draw from a specific documented moment.";
+    apiHistory.current.push({ role: "user", content: prompt });
+    try {
+      const reply = await fetchTwin(apiHistory.current);
+      apiHistory.current.push({ role: "assistant", content: reply });
+      setMessages(p => [...p, { role: "assistant", content: reply }]);
+    } catch { setError("Unable to reach the Digital Twin. Please try again."); }
+    setLoading(false);
+  };
+
+  const sendQA = async () => {
+    if (!input.trim() || loading) return;
+    const userMsg = { role: "user", content: input };
+    apiHistory.current.push(userMsg);
+    setMessages(p => [...p, userMsg]);
+    setInput(""); setLoading(true); setError(null);
+    try {
+      const reply = await fetchTwin(apiHistory.current);
+      const assistantMsg = { role: "assistant", content: reply };
+      apiHistory.current.push(assistantMsg);
+      setMessages(p => [...p, assistantMsg]);
+    } catch { setError("Unable to reach the Digital Twin. Please try again."); }
+    setLoading(false);
+  };
+
+  const switchMode = (m) => {
+    if (m === modeRef.current) return;
+    modeRef.current = m;
+    apiHistory.current = [];
+    setMessages([]); setError(null);
+    onSwitchMode(m);
+    if (m === "narrator") setTimeout(triggerNarrator, 50);
+  };
+
+  // Trigger narrator on mount
+  useEffect(() => {
+    modeRef.current = mode;
+    if (mode === "narrator") triggerNarrator();
+  }, []);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(4,4,4,0.97)", backdropFilter: "blur(24px)", display: "flex", flexDirection: "column", animation: "fadeIn 0.35s ease" }}>
+      <div className="scanline-fx" />
+
+      {/* Header */}
+      <div style={{ padding: "22px 36px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 20, flexShrink: 0 }}>
+        <div>
+          <div className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8", marginBottom: 4 }}>◉ DIGITAL TWIN · VERIFIED DATA</div>
+          <div className="bebas" style={{ fontSize: 26, letterSpacing: 4, color: "#F0EBE3" }}>{athlete.name}</div>
+        </div>
+        <div style={{ flex: 1 }} />
+        {/* Mode toggle */}
+        <div style={{ display: "flex", gap: 2, background: "#111", padding: 2, borderRadius: 3 }}>
+          {["narrator","qa"].map(m => (
+            <button key={m} onClick={() => switchMode(m)}
+              className={mode === m ? "mode-btn-active" : ""}
+              style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "8px 16px", border: "none", borderRadius: 2, cursor: "pointer", background: mode === m ? "#C9A84C" : "transparent", color: mode === m ? "#080808" : "#555", transition: "all 0.2s" }}>
+              {m === "narrator" ? "▶ NARRATOR" : "✦ Q&A"}
+            </button>
+          ))}
+        </div>
+        <button onClick={onClose}
+          style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, color: "#444", background: "none", border: "1px solid #1e1e1e", padding: "8px 14px", cursor: "pointer", borderRadius: 2, transition: "color 0.2s" }}
+          onMouseEnter={e => e.target.style.color="#888"} onMouseLeave={e => e.target.style.color="#444"}>
+          CLOSE ✕
+        </button>
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        {/* Avatar sidebar */}
+        <div style={{ width: 220, flexShrink: 0, borderRight: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "36px 18px", gap: 22 }}>
+          {/* Rings */}
+          <div style={{ position: "relative", width: 120, height: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div className="ring-b" style={{ position: "absolute", inset: -22, borderRadius: "50%", border: "1px solid rgba(201,168,76,0.18)" }} />
+            <div className="ring-a" style={{ position: "absolute", inset: -8, borderRadius: "50%", border: "1px solid rgba(201,168,76,0.42)" }} />
+            <div className="ring-a" style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "2px solid rgba(201,168,76,0.7)" }} />
+            <div style={{ width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle,#18180e 0%,#0a0a06 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: loading ? "0 0 36px rgba(201,168,76,0.45)" : "0 0 18px rgba(201,168,76,0.12)", transition: "box-shadow 0.5s" }}>
+              <span className="bebas" style={{ fontSize: 34, letterSpacing: 3, color: "#C9A84C" }}>{athlete.initials}</span>
+            </div>
+          </div>
+          {/* Status */}
+          <div style={{ textAlign: "center" }}>
+            <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: loading ? "#7BC8E8" : "#C9A84C", marginBottom: 6 }}>
+              {loading ? "◉ SPEAKING..." : "● READY"}
+            </div>
+            <div className="mono" style={{ fontSize: 8, letterSpacing: 1, color: "#2a2a2a" }}>VERIFIED TWIN v1.0</div>
+          </div>
+          {/* Mini stats */}
+          <div style={{ width: "100%", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 20 }}>
+            {athlete.stats.slice(0,2).map((s,i) => (
+              <div key={i} style={{ marginBottom: 14 }}>
+                <div className="bebas" style={{ fontSize: 22, letterSpacing: 2, color: "#C9A84C" }}>{s.v}</div>
+                <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#3a3a3a" }}>{s.l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Chat area */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "36px 40px" }}>
+            {messages.length === 0 && !loading && !error && (
+              <div style={{ textAlign: "center", paddingTop: 80 }}>
+                <div className="cormorant" style={{ fontStyle: "italic", fontSize: 22, color: "rgba(240,235,227,0.18)", marginBottom: 12 }}>
+                  {mode === "narrator" ? "Preparing the story..." : "Ask anything."}
+                </div>
+                {mode === "qa" && <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#2a2a2a" }}>THE TWIN RESPONDS ONLY WITH VERIFIED FACTS.</div>}
+              </div>
+            )}
+
+            {messages.map((msg, i) => (
+              <div key={i} style={{ marginBottom: 30, animation: "fadeUp 0.5s ease" }}>
+                {msg.role === "user" ? (
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <div style={{ maxWidth: "58%", padding: "14px 18px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 2 }}>
+                      <div style={{ fontSize: 14, color: "rgba(240,235,227,0.65)", lineHeight: 1.65 }}>{msg.content}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 18, alignItems: "flex-start" }}>
+                    <div style={{ width: 34, height: 34, borderRadius: "50%", border: "1px solid rgba(201,168,76,0.42)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: "rgba(201,168,76,0.05)" }}>
+                      <span className="bebas" style={{ fontSize: 11, color: "#C9A84C", letterSpacing: 1 }}>{athlete.initials}</span>
+                    </div>
+                    <div style={{ flex: 1, paddingTop: 2 }}>
+                      <div className="cormorant" style={{ fontStyle: "italic", fontSize: 19, color: "#F0EBE3", lineHeight: 1.75 }}>{msg.content}</div>
+                      <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#2e2e2e", marginTop: 10 }}>✓ VERIFIED TWIN RESPONSE</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {loading && (
+              <div style={{ display: "flex", gap: 18, alignItems: "flex-start", animation: "fadeIn 0.3s ease" }}>
+                <div style={{ width: 34, height: 34, borderRadius: "50%", border: "1px solid rgba(201,168,76,0.42)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: "rgba(201,168,76,0.05)" }}>
+                  <span className="bebas" style={{ fontSize: 11, color: "#C9A84C" }}>{athlete.initials}</span>
+                </div>
+                <div style={{ display: "flex", gap: 7, alignItems: "center", paddingTop: 10 }}>
+                  {[0,1,2].map(i => (
+                    <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#C9A84C", animation: `dot 1.4s ease-in-out ${i*0.2}s infinite` }} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div className="mono" style={{ padding: "14px 18px", background: "rgba(255,70,70,0.07)", border: "1px solid rgba(255,70,70,0.2)", color: "rgba(255,150,150,0.8)", fontSize: 10, borderRadius: 2 }}>{error}</div>
+            )}
+
+            <div ref={bottomRef} />
+          </div>
+
+          {/* Input / Controls */}
+          {mode === "qa" ? (
+            <div style={{ padding: "20px 36px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: 10 }}>
+              <input className="twin-input" value={input} onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendQA())}
+                placeholder={`Ask ${athlete.name.split(" ")[0]} anything...`}
+                disabled={loading}
+                style={{ flex: 1, background: "#0f0f0f", border: "1px solid rgba(255,255,255,0.07)", color: "#F0EBE3", padding: "13px 18px", fontFamily: '"DM Sans"', fontSize: 14, borderRadius: 2, transition: "border-color 0.2s" }} />
+              <button onClick={sendQA} disabled={loading || !input.trim()}
+                style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 22px", background: loading || !input.trim() ? "#161616" : "#C9A84C", color: loading || !input.trim() ? "#3a3a3a" : "#080808", border: "none", borderRadius: 2, cursor: loading || !input.trim() ? "not-allowed" : "pointer", transition: "all 0.2s" }}>
+                SEND →
+              </button>
+            </div>
+          ) : (
+            messages.length > 0 && !loading && (
+              <div style={{ padding: "20px 36px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+                <button className="twin-btn" onClick={continueNarrator}
+                  style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#7BC8E8", border: "1px solid rgba(123,200,232,0.3)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
+                  ▶ CONTINUE THE STORY
+                </button>
+                <button className="twin-btn" onClick={() => switchMode("qa")}
+                  style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.3)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
+                  ✦ SWITCH TO Q&A
+                </button>
+              </div>
+            )
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
