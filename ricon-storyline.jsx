@@ -14,7 +14,9 @@ const CSS = `
   @keyframes dot { 0%,60%,100%{transform:scale(1);opacity:1;} 30%{transform:scale(1.5);opacity:0.4;} }
   @keyframes scanline { 0%{top:-10%;} 100%{top:110%;} }
   @keyframes goldGlow { 0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,0);} 50%{box-shadow:0 0 28px 6px rgba(201,168,76,0.22);} }
+  @keyframes slowDrift { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(-18px,10px,0) scale(1.04);} }
   .ricon-root { background:#080808; min-height:100vh; color:#F0EBE3; font-family:"DM Sans",sans-serif; overflow-x:hidden; }
+  button { font: inherit; }
   .bebas { font-family:"Bebas Neue",sans-serif; }
   .cormorant { font-family:"Cormorant Garamond",serif; }
   .mono { font-family:"Space Mono",monospace; }
@@ -36,6 +38,22 @@ const CSS = `
   .back-btn:hover { color:#C9A84C !important; }
   .mode-btn-active { background:#C9A84C !important; color:#080808 !important; }
   .scanline-fx { pointer-events:none; position:absolute; left:0; right:0; height:80px; background:linear-gradient(transparent,rgba(201,168,76,0.03),transparent); animation:scanline 6s linear infinite; }
+  .hero-field { animation:slowDrift 13s ease-in-out infinite; }
+  .story-shell { min-height:100vh; position:relative; overflow:hidden; background:radial-gradient(circle at 72% 18%,rgba(201,168,76,0.16),transparent 34%),radial-gradient(circle at 18% 70%,rgba(123,200,232,0.1),transparent 30%),#070707; }
+  .story-panel { background:rgba(12,12,12,0.72); border:1px solid rgba(255,255,255,0.08); backdrop-filter:blur(28px); }
+  .proof-btn:hover, .story-card-btn:hover { border-color:rgba(201,168,76,0.65) !important; color:#FFD87A !important; background:rgba(201,168,76,0.08) !important; }
+  .compact-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:2px; }
+  @media (max-width: 760px) {
+    .hide-mobile { display:none !important; }
+    .ricon-nav { padding:18px 18px !important; }
+    .home-hero, .athlete-hero, .story-pad { padding-left:20px !important; padding-right:20px !important; }
+    .home-hero { grid-template-columns:1fr !important; padding-top:36px !important; }
+    .story-layout, .twin-layout { flex-direction:column !important; }
+    .twin-sidebar { display:none !important; }
+    .timeline-line { display:none !important; }
+    .timeline-row { gap:12px !important; }
+    .timeline-year { width:64px !important; }
+  }
 `;
 
 const ATHLETES = [
@@ -147,6 +165,45 @@ const TYPE_CONFIG = {
   return:     { label:"RETURN",     icon:"↩", color:"#7BC8E8"  },
 };
 
+const FEATURED = { athleteId: "jordan", momentIndex: 6 };
+const VERIFICATION_LEVELS = ["L1 SOURCE-CITED", "L2 MULTI-SOURCE", "L3 TALENT-READY", "L4 RIGHTS-CLEARED"];
+
+const getFeaturedAthlete = () => ATHLETES.find(a => a.id === FEATURED.athleteId) || ATHLETES[0];
+const getFeaturedMoment = () => getFeaturedAthlete().moments[FEATURED.momentIndex] || getFeaturedAthlete().moments[0];
+const sourceTypeFor = (src = "") => src.includes("ESPN") || src.includes("Times") || src.includes("Tribune") || src.includes("Globe") || src.includes("Chronicle") ? "Published archive" : "Official record";
+const verificationFor = (moment) => moment.type === "championship" || moment.type === "record" ? VERIFICATION_LEVELS[1] : moment.type === "iconic" ? VERIFICATION_LEVELS[2] : VERIFICATION_LEVELS[0];
+const sourceDetailsFor = (moment) => ({
+  summary: moment.body,
+  name: moment.src,
+  type: sourceTypeFor(moment.src),
+  publisher: moment.src.split(/[·,]/)[0].trim(),
+  accessed: "May 2026",
+  level: verificationFor(moment),
+  reviewer: "RICON Editorial QA",
+  url: "Private demo source packet",
+});
+const collectibleFor = (athlete, moment, index = 0) => {
+  if (!["championship", "iconic", "record"].includes(moment.type)) return null;
+  return {
+    id: `${athlete.id}-${moment.y}-${index}`,
+    title: `${moment.y} ${athlete.initials} Legacy Proof`,
+    edition: index % 2 === 0 ? "Edition of 250" : "Edition of 500",
+    price: index % 2 === 0 ? "Notify-me preview" : "Marketplace preview",
+    provenance: `Authenticated story artifact tied to ${athlete.name}'s verified ${moment.title} moment.`,
+    url: `https://ricon.example/marketplace?athlete=${athlete.id}&moment=${encodeURIComponent(moment.title)}`
+  };
+};
+const storyPanelsFor = (athlete, moment) => [
+  { k: "SETUP", t: `${moment.y} · ${moment.era}`, b: `${athlete.name} enters a defining chapter: ${moment.title}.` },
+  { k: "MOMENT", t: "The verified record", b: moment.body },
+  { k: "PROOF", t: "Why it matters", b: `${sourceDetailsFor(moment).level} through ${moment.src}. This is the layer RICON turns into story, proof, and collectible context.` },
+];
+const suggestedPromptsFor = (athlete, moment) => [
+  `Tell me about ${moment?.y || athlete.moments[0].y}.`,
+  `Why did ${moment?.title || athlete.moments[0].title} matter?`,
+  `What defined your legacy?`,
+];
+
 const buildSystemPrompt = (a) => `You are the verified Digital Twin of ${a.name}, powered exclusively by documented, source-backed biographical data.
 
 PERSONALITY: ${a.voice}
@@ -171,28 +228,40 @@ RULES — NON-NEGOTIABLE:
 export default function RICONStoryline() {
   const [screen, setScreen] = useState("home");
   const [athlete, setAthlete] = useState(null);
+  const [moment, setMoment] = useState(null);
+  const [momentIndex, setMomentIndex] = useState(0);
+  const [sourceMoment, setSourceMoment] = useState(null);
   const [twinOpen, setTwinOpen] = useState(false);
   const [twinMode, setTwinMode] = useState("narrator");
 
   const openAthlete = (a) => { setAthlete(a); setScreen("athlete"); };
-  const goHome = () => { setScreen("home"); setAthlete(null); setTwinOpen(false); };
+  const openStory = (a, m, i = 0) => { setAthlete(a); setMoment(m); setMomentIndex(i); setScreen("story"); };
+  const goHome = () => { setScreen("home"); setAthlete(null); setMoment(null); setTwinOpen(false); setSourceMoment(null); };
+  const backToAthlete = () => { setScreen("athlete"); setMoment(null); setSourceMoment(null); };
   const openTwin = (mode) => { setTwinMode(mode); setTwinOpen(true); };
 
   return (
     <>
       <style>{CSS}</style>
       <div className="ricon-root">
-        {screen === "home" && <HomeScreen onSelect={openAthlete} />}
+        {screen === "home" && <HomeScreen onSelect={openAthlete} onStory={openStory} />}
         {screen === "athlete" && athlete && (
-          <AthleteScreen athlete={athlete} onBack={goHome} onTwin={openTwin} />
+          <AthleteScreen athlete={athlete} onBack={goHome} onTwin={openTwin} onStory={openStory} onSource={(m) => setSourceMoment(m)} />
+        )}
+        {screen === "story" && athlete && moment && (
+          <StoryView athlete={athlete} moment={moment} momentIndex={momentIndex} onBack={backToAthlete} onHome={goHome} onTwin={openTwin} onSource={() => setSourceMoment(moment)} />
         )}
         {twinOpen && athlete && (
           <TwinModal
             athlete={athlete}
+            moment={moment}
             mode={twinMode}
             onClose={() => setTwinOpen(false)}
             onSwitchMode={(m) => setTwinMode(m)}
           />
+        )}
+        {sourceMoment && athlete && (
+          <SourceSheet athlete={athlete} moment={sourceMoment} onClose={() => setSourceMoment(null)} />
         )}
       </div>
     </>
@@ -200,11 +269,14 @@ export default function RICONStoryline() {
 }
 
 // ─── HOME ────────────────────────────────────────────────────────────────────
-function HomeScreen({ onSelect }) {
+function HomeScreen({ onSelect, onStory }) {
+  const featuredAthlete = getFeaturedAthlete();
+  const featuredMoment = getFeaturedMoment();
+  const proof = sourceDetailsFor(featuredMoment);
   return (
     <div style={{ minHeight: "100vh", animation: "fadeIn 0.6s ease" }}>
       {/* Nav */}
-      <nav style={{ padding: "26px 40px", display: "flex", alignItems: "center", gap: "14px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+      <nav className="ricon-nav" style={{ padding: "26px 40px", display: "flex", alignItems: "center", gap: "14px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
         <span className="bebas" style={{ fontSize: 20, letterSpacing: 5, color: "#C9A84C" }}>RICON</span>
         <div style={{ width: 1, height: 20, background: "#2a2a2a" }} />
         <span className="bebas" style={{ fontSize: 20, letterSpacing: 5, color: "rgba(240,235,227,0.45)" }}>STORYLINE</span>
@@ -215,20 +287,65 @@ function HomeScreen({ onSelect }) {
       </nav>
 
       {/* Hero */}
-      <div style={{ padding: "80px 40px 56px", textAlign: "center" }}>
-        <div className="cormorant" style={{ fontStyle: "italic", fontSize: 16, color: "#7BC8E8", letterSpacing: 4, marginBottom: 26, animation: "fadeIn 1s ease" }}>
-          Verified Stories. Immersive Legacies.
+      <div className="home-hero" style={{ padding: "58px 40px 48px", display: "grid", gridTemplateColumns: "1.05fr 0.95fr", gap: 36, alignItems: "center", minHeight: "calc(100vh - 92px)" }}>
+        <div style={{ position: "relative", zIndex: 1 }}>
+          <div className="mono" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 11px", border: "1px solid rgba(123,200,232,0.28)", color: "#7BC8E8", fontSize: 9, letterSpacing: 2, marginBottom: 26 }}>
+            ✓ VERIFIED FEATURED STORY · {proof.level}
+          </div>
+          <div className="bebas gold-text gold-shimmer" style={{ fontSize: "clamp(58px,11vw,132px)", letterSpacing: 9, lineHeight: 0.86, marginBottom: 22, display: "block" }}>
+            {featuredAthlete.name}
+          </div>
+          <div className="cormorant" style={{ fontStyle: "italic", fontSize: "clamp(23px,3vw,38px)", color: "#F0EBE3", lineHeight: 1.25, maxWidth: 720, marginBottom: 22 }}>
+            {featuredMoment.title}
+          </div>
+          <div style={{ fontSize: 15, color: "rgba(240,235,227,0.55)", maxWidth: 680, lineHeight: 1.75, marginBottom: 30 }}>
+            {featuredMoment.body}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+            <button aria-label={`Start story for ${featuredMoment.title}`} className="cta-glow" onClick={() => onStory(featuredAthlete, featuredMoment, FEATURED.momentIndex)}
+              style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "14px 22px", background: "linear-gradient(135deg,#C9A84C,#FFD87A)", color: "#080808", border: "none", cursor: "pointer", borderRadius: 2 }}>
+              ▶ START STORY
+            </button>
+            <button className="story-card-btn" onClick={() => onSelect(featuredAthlete)}
+              style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "14px 22px", background: "rgba(255,255,255,0.02)", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.32)", cursor: "pointer", borderRadius: 2 }}>
+              VIEW TIMELINE
+            </button>
+          </div>
         </div>
-        <div className="bebas gold-text gold-shimmer" style={{ fontSize: "clamp(72px,13vw,130px)", letterSpacing: 10, lineHeight: 0.88, marginBottom: 24, display: "block" }}>
-          STORYLINE
-        </div>
-        <div className="cormorant" style={{ fontStyle: "italic", fontSize: 18, color: "rgba(240,235,227,0.28)", letterSpacing: 1 }}>
-          Choose a legend. Begin the journey.
+        <div className="story-panel" style={{ position: "relative", minHeight: 430, padding: 30, overflow: "hidden" }}>
+          <div className="hero-field bebas" style={{ position: "absolute", inset: "auto -26px -54px auto", fontSize: 260, letterSpacing: 8, color: "rgba(201,168,76,0.055)", lineHeight: 0.8 }}>
+            {featuredAthlete.initials}
+          </div>
+          <div style={{ position: "relative", zIndex: 1 }}>
+            <div className="mono" style={{ fontSize: 9, color: "#7BC8E8", letterSpacing: 3, marginBottom: 20 }}>CINEMATIC STORY ENGINE</div>
+            <div className="compact-grid" style={{ marginBottom: 26 }}>
+              {featuredAthlete.stats.map((s) => (
+                <div key={s.l} style={{ padding: 18, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.04)" }}>
+                  <div className="bebas" style={{ fontSize: 34, color: "#C9A84C", letterSpacing: 2 }}>{s.v}</div>
+                  <div className="mono" style={{ fontSize: 8, color: "#555", letterSpacing: 2 }}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+            <div className="cormorant" style={{ fontStyle: "italic", fontSize: 20, lineHeight: 1.7, color: "rgba(240,235,227,0.72)", marginBottom: 20 }}>
+              "{featuredAthlete.tagline}"
+            </div>
+            <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#555", lineHeight: 1.8 }}>
+              TRUST → STORY → TWIN → COLLECTIBLE
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Divider */}
       <div style={{ margin: "0 40px 40px", height: 1, background: "linear-gradient(to right,transparent,rgba(201,168,76,0.3),transparent)" }} />
+
+      <div style={{ padding: "0 40px 20px", display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "end" }}>
+        <div>
+          <div className="mono" style={{ fontSize: 9, color: "#7BC8E8", letterSpacing: 3, marginBottom: 8 }}>AVAILABLE LEGACY FILES</div>
+          <div className="bebas" style={{ fontSize: 34, letterSpacing: 4, color: "#F0EBE3" }}>Choose The Next Story</div>
+        </div>
+        <div className="mono" style={{ fontSize: 9, color: "#4a4a4a", letterSpacing: 2 }}>{ATHLETES.reduce((sum, a) => sum + a.moments.length, 0)} VERIFIED MOMENTS · {ATHLETES.length} ATHLETES</div>
+      </div>
 
       {/* Grid */}
       <div style={{ padding: "0 32px 80px", display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 2 }}>
@@ -269,18 +386,20 @@ function AthleteCard({ athlete, delay, onClick }) {
       </div>
       {/* Explore CTA */}
       <div className="mono card-explore" style={{ fontSize: 9, letterSpacing: 3, color: "#C9A84C", opacity: 0, transform: "translateY(8px)", transition: "all 0.3s", display: "flex", alignItems: "center", gap: 8 }}>
-        EXPLORE STORY <span style={{ fontSize: 13 }}>→</span>
+        {athlete.moments.length} VERIFIED STORIES <span style={{ fontSize: 13 }}>→</span>
       </div>
     </div>
   );
 }
 
 // ─── ATHLETE SCREEN ───────────────────────────────────────────────────────────
-function AthleteScreen({ athlete, onBack, onTwin }) {
+function AthleteScreen({ athlete, onBack, onTwin, onStory, onSource }) {
+  const leadMoment = athlete.moments.find(m => m.type === "championship" || m.type === "iconic") || athlete.moments[0];
+  const leadIndex = athlete.moments.indexOf(leadMoment);
   return (
     <div style={{ minHeight: "100vh", animation: "fadeIn 0.4s ease" }}>
       {/* Sticky Nav */}
-      <nav style={{ padding: "22px 40px", display: "flex", alignItems: "center", gap: 18, borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(8,8,8,0.96)", backdropFilter: "blur(24px)", zIndex: 90 }}>
+      <nav className="ricon-nav" style={{ padding: "22px 40px", display: "flex", alignItems: "center", gap: 18, borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(8,8,8,0.96)", backdropFilter: "blur(24px)", zIndex: 90 }}>
         <button className="mono back-btn" onClick={onBack}
           style={{ fontSize: 9, letterSpacing: 2, color: "#666", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, transition: "color 0.2s" }}>
           ← ROSTER
@@ -295,7 +414,7 @@ function AthleteScreen({ athlete, onBack, onTwin }) {
       </nav>
 
       {/* Hero */}
-      <div style={{ padding: "76px 40px 52px", position: "relative", overflow: "hidden" }}>
+      <div className="athlete-hero" style={{ padding: "76px 40px 52px", position: "relative", overflow: "hidden" }}>
         <div className="bebas" style={{ position: "absolute", bottom: -60, right: 10, fontSize: 300, letterSpacing: 8, color: "rgba(201,168,76,0.022)", lineHeight: 1, userSelect: "none", pointerEvents: "none" }}>
           {athlete.initials}
         </div>
@@ -307,6 +426,16 @@ function AthleteScreen({ athlete, onBack, onTwin }) {
         </h1>
         <div className="cormorant" style={{ fontStyle: "italic", fontSize: 20, color: "rgba(240,235,227,0.38)", maxWidth: 580, lineHeight: 1.65 }}>
           "{athlete.tagline}"
+        </div>
+        <div style={{ marginTop: 30, display: "flex", flexWrap: "wrap", gap: 12 }}>
+          <button onClick={() => onStory(athlete, leadMoment, leadIndex)} className="cta-glow"
+            style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 20px", background: "linear-gradient(135deg,#C9A84C,#FFD87A)", color: "#080808", border: "none", cursor: "pointer", borderRadius: 2 }}>
+            ▶ PLAY FEATURED MOMENT
+          </button>
+          <button onClick={() => onSource(leadMoment)} className="proof-btn"
+            style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 20px", background: "transparent", color: "#7BC8E8", border: "1px solid rgba(123,200,232,0.32)", cursor: "pointer", borderRadius: 2 }}>
+            ✓ OPEN PROOF
+          </button>
         </div>
 
         {/* Stats row */}
@@ -341,7 +470,7 @@ function AthleteScreen({ athlete, onBack, onTwin }) {
         </div>
         <div style={{ position: "relative" }}>
           <div style={{ position: "absolute", left: 108, top: 0, bottom: 0, width: 1, background: "linear-gradient(to bottom,transparent,rgba(201,168,76,0.28) 8%,rgba(201,168,76,0.28) 92%,transparent)" }} />
-          {athlete.moments.map((m, i) => <TimelineMoment key={i} moment={m} index={i} total={athlete.moments.length} />)}
+          {athlete.moments.map((m, i) => <TimelineMoment key={i} athlete={athlete} moment={m} index={i} total={athlete.moments.length} onStory={() => onStory(athlete, m, i)} onSource={() => onSource(m)} />)}
         </div>
       </div>
 
@@ -358,10 +487,11 @@ function AthleteScreen({ athlete, onBack, onTwin }) {
 }
 
 // ─── TIMELINE MOMENT ──────────────────────────────────────────────────────────
-function TimelineMoment({ moment, index, total }) {
+function TimelineMoment({ athlete, moment, index, total, onStory, onSource }) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
   const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
+  const collectible = collectibleFor(athlete, moment, index);
 
   useEffect(() => {
     const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect(); } }, { threshold: 0.15 });
@@ -387,11 +517,19 @@ function TimelineMoment({ moment, index, total }) {
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 12, padding: "3px 10px", border: `1px solid ${cfg.color}40`, borderRadius: 2 }}>
             <span className="mono" style={{ fontSize: 9, letterSpacing: 2, color: cfg.color }}>{cfg.icon} {cfg.label}</span>
           </div>
-          <div className="bebas" style={{ fontSize: 24, letterSpacing: 2, color: "#F0EBE3", lineHeight: 1.2, marginBottom: 12 }}>{moment.title}</div>
+          {collectible && (
+            <div className="mono" style={{ display: "inline-flex", marginLeft: 8, alignItems: "center", gap: 6, marginBottom: 12, padding: "3px 10px", border: "1px solid rgba(201,168,76,0.32)", borderRadius: 2, color: "#C9A84C", fontSize: 9, letterSpacing: 2 }}>
+              OWNABLE MOMENT
+            </div>
+          )}
+          <button onClick={onStory} className="story-card-btn bebas" style={{ display: "block", textAlign: "left", fontSize: 24, letterSpacing: 2, color: "#F0EBE3", lineHeight: 1.2, marginBottom: 12, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+            {moment.title}
+          </button>
           <div className="cormorant" style={{ fontStyle: "italic", fontSize: 17, color: "rgba(240,235,227,0.62)", lineHeight: 1.75, marginBottom: 14, maxWidth: 660 }}>{moment.body}</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ width: 8, height: 1, background: "#333" }} />
-            <div className="mono" style={{ fontSize: 9, color: "#383838", letterSpacing: 1 }}>✓ {moment.src}</div>
+            <button onClick={onSource} className="proof-btn mono" style={{ fontSize: 9, color: "#5d5d5d", letterSpacing: 1, background: "transparent", border: "1px solid rgba(255,255,255,0.06)", padding: "6px 9px", cursor: "pointer", borderRadius: 2 }}>✓ {moment.src}</button>
+            <button onClick={onStory} className="story-card-btn mono" style={{ fontSize: 9, color: "#C9A84C", letterSpacing: 2, background: "transparent", border: "1px solid rgba(201,168,76,0.22)", padding: "6px 10px", cursor: "pointer", borderRadius: 2 }}>PLAY STORY →</button>
           </div>
         </div>
       </div>
@@ -399,8 +537,153 @@ function TimelineMoment({ moment, index, total }) {
   );
 }
 
+// ─── STORY VIEW ───────────────────────────────────────────────────────────────
+function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin, onSource }) {
+  const [step, setStep] = useState(0);
+  const panels = storyPanelsFor(athlete, moment);
+  const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
+  const collectible = collectibleFor(athlete, moment, momentIndex);
+  const progress = Math.round(((step + 1) / panels.length) * 100);
+  const complete = step === panels.length - 1;
+
+  const next = () => setStep(s => Math.min(s + 1, panels.length - 1));
+  const prev = () => setStep(s => Math.max(s - 1, 0));
+
+  return (
+    <div className="story-shell" style={{ animation: "fadeIn 0.35s ease" }}>
+      <div className="scanline-fx" />
+      <div className="bebas hero-field" style={{ position: "absolute", right: "-3vw", bottom: "-9vw", fontSize: "min(38vw,420px)", letterSpacing: 10, color: "rgba(201,168,76,0.035)", lineHeight: 0.85, pointerEvents: "none" }}>
+        {athlete.initials}
+      </div>
+
+      <nav className="ricon-nav" style={{ position: "relative", zIndex: 2, padding: "22px 40px", display: "flex", alignItems: "center", gap: 14, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <button className="mono back-btn" onClick={onBack} style={{ fontSize: 9, letterSpacing: 2, color: "#777", background: "none", border: "none", cursor: "pointer" }}>← TIMELINE</button>
+        <div style={{ width: 1, height: 16, background: "#252525" }} />
+        <span className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8" }}>{athlete.name}</span>
+        <div style={{ flex: 1 }} />
+        <button className="proof-btn mono" onClick={onSource} style={{ fontSize: 9, letterSpacing: 2, color: "#C9A84C", background: "transparent", border: "1px solid rgba(201,168,76,0.25)", padding: "8px 12px", cursor: "pointer" }}>✓ PROOF</button>
+        <button className="hide-mobile mono" onClick={onHome} style={{ fontSize: 9, letterSpacing: 2, color: "#555", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", padding: "8px 12px", cursor: "pointer" }}>ROSTER</button>
+      </nav>
+
+      <div className="story-pad story-layout" style={{ position: "relative", zIndex: 1, padding: "56px 40px 40px", display: "flex", gap: 28, alignItems: "stretch" }}>
+        <div style={{ flex: "1 1 58%", minHeight: 520, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          <div>
+            <div className="mono" style={{ display: "inline-flex", gap: 8, alignItems: "center", border: `1px solid ${cfg.color}55`, color: cfg.color, padding: "6px 10px", fontSize: 9, letterSpacing: 2, marginBottom: 24 }}>
+              {cfg.icon} {cfg.label} · {moment.y} · {sourceDetailsFor(moment).level}
+            </div>
+            <h1 className="bebas" style={{ fontSize: "clamp(54px,9vw,116px)", letterSpacing: 7, lineHeight: 0.88, color: "#F0EBE3", maxWidth: 900, marginBottom: 24 }}>
+              {moment.title}
+            </h1>
+            <div className="cormorant" style={{ fontStyle: "italic", fontSize: "clamp(22px,3vw,34px)", lineHeight: 1.45, color: "rgba(240,235,227,0.72)", maxWidth: 820 }}>
+              {panels[step].b}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 42 }}>
+            <div style={{ height: 3, background: "rgba(255,255,255,0.08)", marginBottom: 18 }}>
+              <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#7BC8E8,#C9A84C,#FFD87A)", transition: "width 0.35s ease" }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+              <div className="mono" style={{ fontSize: 9, color: "#555", letterSpacing: 2 }}>SCENE {step + 1}/{panels.length} · {panels[step].k}</div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button onClick={prev} disabled={step === 0} className="story-card-btn mono" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 14px", background: "rgba(255,255,255,0.03)", color: step === 0 ? "#333" : "#C9A84C", border: "1px solid rgba(255,255,255,0.08)", cursor: step === 0 ? "not-allowed" : "pointer" }}>BACK</button>
+                <button onClick={complete ? () => onTwin("qa") : next} className="cta-glow mono" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 16px", background: "#C9A84C", color: "#080808", border: "none", cursor: "pointer" }}>
+                  {complete ? "ASK THE TWIN" : "CONTINUE"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside className="story-panel" style={{ flex: "0 1 380px", padding: 26, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 24 }}>
+          <div>
+            <div className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8", marginBottom: 14 }}>LIVE STORY CARD</div>
+            <div style={{ aspectRatio: "1 / 1", background: `radial-gradient(circle,${cfg.color}33,transparent 62%),#0b0b0b`, border: `1px solid ${cfg.color}33`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18 }}>
+              <span className="bebas" style={{ fontSize: 82, letterSpacing: 6, color: cfg.color }}>{athlete.initials}</span>
+            </div>
+            <div className="bebas" style={{ fontSize: 26, letterSpacing: 3, color: "#F0EBE3", marginBottom: 8 }}>{moment.era}</div>
+            <div style={{ fontSize: 13, color: "rgba(240,235,227,0.48)", lineHeight: 1.65 }}>{athlete.teams}</div>
+          </div>
+
+          <div>
+            <button onClick={onSource} className="proof-btn mono" style={{ width: "100%", fontSize: 9, letterSpacing: 2, padding: "12px 14px", color: "#7BC8E8", background: "rgba(123,200,232,0.04)", border: "1px solid rgba(123,200,232,0.24)", cursor: "pointer", marginBottom: 10 }}>OPEN VERIFIED SOURCE SHEET</button>
+            {collectible && complete && (
+              <div style={{ padding: 18, border: "1px solid rgba(201,168,76,0.32)", background: "linear-gradient(135deg,rgba(201,168,76,0.12),rgba(255,255,255,0.03))", animation: "fadeUp 0.4s ease" }}>
+                <div className="mono" style={{ fontSize: 9, color: "#C9A84C", letterSpacing: 2, marginBottom: 10 }}>OWN THIS MOMENT</div>
+                <div className="bebas" style={{ fontSize: 24, letterSpacing: 2, color: "#F0EBE3", marginBottom: 8 }}>{collectible.title}</div>
+                <div style={{ fontSize: 12, color: "rgba(240,235,227,0.52)", lineHeight: 1.55, marginBottom: 12 }}>{collectible.provenance}</div>
+                <div className="mono" style={{ fontSize: 8, color: "#777", letterSpacing: 1, marginBottom: 14 }}>{collectible.edition} · {collectible.price}</div>
+                <a href={collectible.url} className="mono" style={{ display: "block", textAlign: "center", fontSize: 9, letterSpacing: 2, color: "#080808", background: "#C9A84C", padding: "11px 12px", textDecoration: "none" }}>MARKETPLACE PREVIEW →</a>
+              </div>
+            )}
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+// ─── SOURCE SHEET ─────────────────────────────────────────────────────────────
+function SourceSheet({ athlete, moment, onClose }) {
+  const source = sourceDetailsFor(moment);
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1200, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "end", justifyContent: "center", animation: "fadeIn 0.22s ease" }} onClick={onClose}>
+      <div className="story-panel" onClick={(e) => e.stopPropagation()} style={{ width: "min(860px,100%)", maxHeight: "86vh", overflowY: "auto", padding: "30px 34px", borderRadius: "8px 8px 0 0", borderBottom: "none" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 18, alignItems: "start", marginBottom: 24 }}>
+          <div>
+            <div className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8", marginBottom: 8 }}>VERIFIED SOURCE SHEET</div>
+            <div className="bebas" style={{ fontSize: 34, letterSpacing: 3, color: "#F0EBE3" }}>{moment.title}</div>
+          </div>
+          <button onClick={onClose} className="proof-btn mono" style={{ fontSize: 9, letterSpacing: 2, color: "#777", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", padding: "9px 12px", cursor: "pointer" }}>CLOSE</button>
+        </div>
+
+        <div className="compact-grid" style={{ marginBottom: 26 }}>
+          {[["ATHLETE", athlete.name], ["MOMENT", `${moment.y} · ${moment.era}`], ["LEVEL", source.level], ["REVIEWER", source.reviewer]].map(([label, value]) => (
+            <div key={label} style={{ padding: 16, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#555", marginBottom: 7 }}>{label}</div>
+              <div style={{ fontSize: 13, color: "rgba(240,235,227,0.72)", lineHeight: 1.45 }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginBottom: 24 }}>
+          <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#C9A84C", marginBottom: 10 }}>FACT SUMMARY</div>
+          <div className="cormorant" style={{ fontStyle: "italic", fontSize: 21, color: "#F0EBE3", lineHeight: 1.65 }}>{source.summary}</div>
+        </div>
+
+        <div style={{ padding: 20, border: "1px solid rgba(123,200,232,0.18)", background: "rgba(123,200,232,0.045)", marginBottom: 20 }}>
+          <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#7BC8E8", marginBottom: 12 }}>PRIMARY SOURCE</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 16 }}>
+            <SourceField label="Name" value={source.name} />
+            <SourceField label="Type" value={source.type} />
+            <SourceField label="Publisher" value={source.publisher} />
+            <SourceField label="Accessed" value={source.accessed} />
+            <SourceField label="URL" value={source.url} />
+          </div>
+        </div>
+
+        <div style={{ padding: 18, background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.18)" }}>
+          <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#C9A84C", marginBottom: 8 }}>HOW RICON VERIFIES DATA</div>
+          <div style={{ fontSize: 13, lineHeight: 1.7, color: "rgba(240,235,227,0.55)" }}>
+            Each public claim is tied to a moment, a source record, a verification level, and editorial review. Production RICON Core would require source coverage and approval status before this fact could power stories, Twin responses, or commerce context.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SourceField({ label, value }) {
+  return (
+    <div>
+      <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#555", marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 13, color: "rgba(240,235,227,0.68)", lineHeight: 1.45 }}>{value}</div>
+    </div>
+  );
+}
+
 // ─── TWIN MODAL ───────────────────────────────────────────────────────────────
-function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
+function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -408,17 +691,19 @@ function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
   const apiHistory = useRef([]);
   const bottomRef = useRef(null);
   const modeRef = useRef(null);
+  const prompts = suggestedPromptsFor(athlete, moment);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
 
   const fetchTwin = async (history) => {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("/api/twin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system: buildSystemPrompt(athlete), messages: history }),
+      body: JSON.stringify({ athlete, system: buildSystemPrompt(athlete), messages: history }),
     });
     const data = await res.json();
-    return data.content?.find(c => c.type === "text")?.text || "The twin is momentarily silent.";
+    if (!res.ok || data.error) throw new Error(data.error || "Twin request failed.");
+    return data.text || "The twin is momentarily silent.";
   };
 
   const triggerNarrator = async () => {
@@ -445,9 +730,10 @@ function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
     setLoading(false);
   };
 
-  const sendQA = async () => {
-    if (!input.trim() || loading) return;
-    const userMsg = { role: "user", content: input };
+  const sendQA = async (override) => {
+    const text = typeof override === "string" ? override : input;
+    if (!text.trim() || loading) return;
+    const userMsg = { role: "user", content: text };
     apiHistory.current.push(userMsg);
     setMessages(p => [...p, userMsg]);
     setInput(""); setLoading(true); setError(null);
@@ -482,8 +768,9 @@ function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
       {/* Header */}
       <div style={{ padding: "22px 36px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 20, flexShrink: 0 }}>
         <div>
-          <div className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8", marginBottom: 4 }}>◉ DIGITAL TWIN · VERIFIED DATA</div>
+          <div className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8", marginBottom: 4 }}>◉ DIGITAL TWIN · VERIFIED RICON RECORD</div>
           <div className="bebas" style={{ fontSize: 26, letterSpacing: 4, color: "#F0EBE3" }}>{athlete.name}</div>
+          {moment && <div className="mono" style={{ fontSize: 8, letterSpacing: 1, color: "#444", marginTop: 5 }}>CONTEXT · {moment.y} · {moment.title}</div>}
         </div>
         <div style={{ flex: 1 }} />
         {/* Mode toggle */}
@@ -504,9 +791,9 @@ function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
       </div>
 
       {/* Body */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      <div className="twin-layout" style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* Avatar sidebar */}
-        <div style={{ width: 220, flexShrink: 0, borderRight: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "36px 18px", gap: 22 }}>
+        <div className="twin-sidebar" style={{ width: 220, flexShrink: 0, borderRight: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "36px 18px", gap: 22 }}>
           {/* Rings */}
           <div style={{ position: "relative", width: 120, height: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div className="ring-b" style={{ position: "absolute", inset: -22, borderRadius: "50%", border: "1px solid rgba(201,168,76,0.18)" }} />
@@ -542,7 +829,16 @@ function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                 <div className="cormorant" style={{ fontStyle: "italic", fontSize: 22, color: "rgba(240,235,227,0.18)", marginBottom: 12 }}>
                   {mode === "narrator" ? "Preparing the story..." : "Ask anything."}
                 </div>
-                {mode === "qa" && <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#2a2a2a" }}>THE TWIN RESPONDS ONLY WITH VERIFIED FACTS.</div>}
+                {mode === "qa" && (
+                  <>
+                    <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#2a2a2a", marginBottom: 22 }}>THE TWIN RESPONDS ONLY WITH VERIFIED FACTS.</div>
+                    <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
+                      {prompts.map((p) => (
+                        <button key={p} className="proof-btn mono" onClick={() => sendQA(p)} style={{ fontSize: 9, letterSpacing: 1, padding: "9px 12px", color: "#C9A84C", background: "transparent", border: "1px solid rgba(201,168,76,0.22)", cursor: "pointer" }}>{p}</button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -561,7 +857,7 @@ function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                     </div>
                     <div style={{ flex: 1, paddingTop: 2 }}>
                       <div className="cormorant" style={{ fontStyle: "italic", fontSize: 19, color: "#F0EBE3", lineHeight: 1.75 }}>{msg.content}</div>
-                      <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#2e2e2e", marginTop: 10 }}>✓ VERIFIED TWIN RESPONSE</div>
+                      <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#2e2e2e", marginTop: 10 }}>✓ BASED ON VERIFIED RICON RECORD · SOURCES USED: {athlete.moments.length}</div>
                     </div>
                   </div>
                 )}
@@ -590,16 +886,23 @@ function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
 
           {/* Input / Controls */}
           {mode === "qa" ? (
-            <div style={{ padding: "20px 36px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: 10 }}>
-              <input className="twin-input" value={input} onChange={e => setInput(e.target.value)}
+            <div style={{ padding: "18px 36px 20px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                {prompts.map((p) => (
+                  <button key={p} className="proof-btn mono" onClick={() => sendQA(p)} disabled={loading} style={{ fontSize: 8, letterSpacing: 1, padding: "7px 9px", color: "#777", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", cursor: loading ? "not-allowed" : "pointer" }}>{p}</button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <input className="twin-input" value={input} onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendQA())}
                 placeholder={`Ask ${athlete.name.split(" ")[0]} anything...`}
                 disabled={loading}
                 style={{ flex: 1, background: "#0f0f0f", border: "1px solid rgba(255,255,255,0.07)", color: "#F0EBE3", padding: "13px 18px", fontFamily: '"DM Sans"', fontSize: 14, borderRadius: 2, transition: "border-color 0.2s" }} />
-              <button onClick={sendQA} disabled={loading || !input.trim()}
+                <button onClick={() => sendQA()} disabled={loading || !input.trim()}
                 style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 22px", background: loading || !input.trim() ? "#161616" : "#C9A84C", color: loading || !input.trim() ? "#3a3a3a" : "#080808", border: "none", borderRadius: 2, cursor: loading || !input.trim() ? "not-allowed" : "pointer", transition: "all 0.2s" }}>
-                SEND →
-              </button>
+                  SEND →
+                </button>
+              </div>
             </div>
           ) : (
             messages.length > 0 && !loading && (
