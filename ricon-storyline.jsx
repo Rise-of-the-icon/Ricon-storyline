@@ -10,8 +10,9 @@ export default function RICONStoryline() {
   const [twinOpen, setTwinOpen] = useState(false);
   const [twinMode, setTwinMode] = useState("narrator");
 
-  const openAthlete = (a) => { setAthlete(a); setScreen("athlete"); };
-  const goHome = () => { setScreen("home"); setAthlete(null); setTwinOpen(false); };
+  const resetScroll = () => window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0 }));
+  const openAthlete = (a) => { setAthlete(a); setScreen("athlete"); resetScroll(); };
+  const goHome = () => { setScreen("home"); setAthlete(null); setTwinOpen(false); resetScroll(); };
   const openTwin = (mode) => { setTwinMode(mode); setTwinOpen(true); };
 
   return (

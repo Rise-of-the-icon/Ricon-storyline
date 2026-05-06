@@ -99,12 +99,12 @@ export const ATHLETES = [
 ];
 
 export const TYPE_CONFIG = {
-  draft:        { label:"DRAFT",   icon:"◈", color:"#7BC8E8" },
-  record:       { label:"RECORD",  icon:"◆", color:"#FFD87A" },
-  iconic:       { label:"ICONIC",  icon:"★", color:"#C9A84C" },
-  championship: { label:"CHAMPION",icon:"◉", color:"#C9A84C" },
-  retirement:   { label:"FAREWELL",icon:"○", color:"#888"    },
-  return:       { label:"RETURN",  icon:"↩", color:"#7BC8E8" },
+  draft:        { label:"DRAFT",   icon:"◈", color:"#60A5FA" },
+  record:       { label:"RECORD",  icon:"◆", color:"#F59E0B" },
+  iconic:       { label:"ICONIC",  icon:"★", color:"#7C6CFF" },
+  championship: { label:"CHAMPION",icon:"◉", color:"#C9A54D" },
+  retirement:   { label:"FAREWELL",icon:"○", color:"#AEB9C8" },
+  return:       { label:"RETURN",  icon:"↩", color:"#10B981" },
 };
 
 export const buildSystemPrompt = (a) => `You are the verified Digital Twin of ${a.name}, powered exclusively by documented, source-backed biographical data.
