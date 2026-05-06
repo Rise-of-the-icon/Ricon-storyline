@@ -15,6 +15,8 @@ const CSS = `
   @keyframes scanline { 0%{top:-10%;} 100%{top:110%;} }
   @keyframes goldGlow { 0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,0);} 50%{box-shadow:0 0 28px 6px rgba(201,168,76,0.22);} }
   @keyframes slowDrift { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(-18px,10px,0) scale(1.04);} }
+  @keyframes videoPulse { 0%,100%{opacity:0.45;transform:scaleX(0.82);} 50%{opacity:1;transform:scaleX(1);} }
+  @keyframes hotspotPulse { 0%,100%{box-shadow:0 0 0 0 rgba(123,200,232,0.2);} 50%{box-shadow:0 0 0 9px rgba(123,200,232,0);} }
   .ricon-root { background:#080808; min-height:100vh; color:#F0EBE3; font-family:"DM Sans",sans-serif; overflow-x:hidden; }
   button { font: inherit; }
   .bebas { font-family:"Bebas Neue",sans-serif; }
@@ -41,6 +43,10 @@ const CSS = `
   .hero-field { animation:slowDrift 13s ease-in-out infinite; }
   .story-shell { min-height:100vh; position:relative; overflow:hidden; background:radial-gradient(circle at 72% 18%,rgba(201,168,76,0.16),transparent 34%),radial-gradient(circle at 18% 70%,rgba(123,200,232,0.1),transparent 30%),#070707; }
   .story-panel { background:rgba(12,12,12,0.72); border:1px solid rgba(255,255,255,0.08); backdrop-filter:blur(28px); }
+  .interactive-video { position:relative; overflow:hidden; min-height:320px; background:#090909; border:1px solid rgba(255,255,255,0.08); }
+  .interactive-video:before { content:""; position:absolute; inset:-20%; background:radial-gradient(circle at 35% 28%,rgba(123,200,232,0.18),transparent 26%),radial-gradient(circle at 68% 62%,rgba(201,168,76,0.22),transparent 30%),linear-gradient(135deg,rgba(255,255,255,0.06),transparent 44%); animation:slowDrift 11s ease-in-out infinite; }
+  .interactive-video:after { content:""; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(8,8,8,0.08),rgba(8,8,8,0.54)),repeating-linear-gradient(to bottom,rgba(255,255,255,0.035) 0,rgba(255,255,255,0.035) 1px,transparent 1px,transparent 7px); pointer-events:none; }
+  .hotspot { animation:hotspotPulse 2.4s ease-in-out infinite; }
   .proof-btn:hover, .story-card-btn:hover { border-color:rgba(201,168,76,0.65) !important; color:#FFD87A !important; background:rgba(201,168,76,0.08) !important; }
   .compact-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:2px; }
   @media (max-width: 760px) {
@@ -449,6 +455,18 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory, onSource }) {
         </div>
       </div>
 
+      <div className="athlete-hero" style={{ padding: "0 40px 34px" }}>
+        <InteractiveStoryVideo
+          athlete={athlete}
+          moment={leadMoment}
+          compact
+          progress={72}
+          onPlay={() => onStory(athlete, leadMoment, leadIndex)}
+          onSource={() => onSource(leadMoment)}
+          onTwin={() => onTwin("qa")}
+        />
+      </div>
+
       {/* Twin activation banner */}
       <div style={{ margin: "0 40px", padding: "22px 28px", background: "linear-gradient(135deg,rgba(201,168,76,0.07),rgba(123,200,232,0.04))", border: "1px solid rgba(201,168,76,0.18)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24, flexWrap: "wrap" }}>
         <div>
@@ -469,7 +487,7 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory, onSource }) {
           CAREER TIMELINE · {athlete.moments.length} VERIFIED MOMENTS
         </div>
         <div style={{ position: "relative" }}>
-          <div style={{ position: "absolute", left: 108, top: 0, bottom: 0, width: 1, background: "linear-gradient(to bottom,transparent,rgba(201,168,76,0.28) 8%,rgba(201,168,76,0.28) 92%,transparent)" }} />
+          <div className="timeline-line" style={{ position: "absolute", left: 114, top: 0, bottom: 0, width: 1, transform: "translateX(-0.5px)", background: "linear-gradient(to bottom,transparent,rgba(201,168,76,0.28) 8%,rgba(201,168,76,0.28) 92%,transparent)" }} />
           {athlete.moments.map((m, i) => <TimelineMoment key={i} athlete={athlete} moment={m} index={i} total={athlete.moments.length} onStory={() => onStory(athlete, m, i)} onSource={() => onSource(m)} />)}
         </div>
       </div>
@@ -502,9 +520,9 @@ function TimelineMoment({ athlete, moment, index, total, onStory, onSource }) {
   return (
     <div ref={ref} className="moment-item" style={{ transitionDelay: `${index * 80}ms` }} data-visible={visible ? "true" : ""}>
       <style>{`.moment-item[data-visible="true"]{opacity:1;transform:translateY(0);}.moment-item[data-visible="false"],.moment-item:not([data-visible]){opacity:0;transform:translateY(20px);}`}</style>
-      <div style={{ display: "flex", marginBottom: 54 }}>
+      <div className="timeline-row" style={{ display: "flex", marginBottom: 54 }}>
         {/* Year col */}
-        <div style={{ width: 96, flexShrink: 0, paddingTop: 3 }}>
+        <div className="timeline-year" style={{ width: 96, flexShrink: 0, paddingTop: 3 }}>
           <div className="mono" style={{ fontSize: 12, color: "#C9A84C", letterSpacing: 1 }}>{moment.y}</div>
           <div className="mono" style={{ fontSize: 8, color: "#3a3a3a", letterSpacing: 1, marginTop: 5, lineHeight: 1.5 }}>{moment.era}</div>
         </div>
@@ -534,6 +552,63 @@ function TimelineMoment({ athlete, moment, index, total, onStory, onSource }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── INTERACTIVE VIDEO MODULE ─────────────────────────────────────────────────
+function InteractiveStoryVideo({ athlete, moment, compact = false, progress = 0, onPlay, onSource, onTwin }) {
+  const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
+  const source = sourceDetailsFor(moment);
+  const clampedProgress = Math.max(8, Math.min(progress, 100));
+  const hotspots = [
+    { label: "PROOF", x: "18%", y: "22%", color: "#7BC8E8", onClick: onSource },
+    { label: "STATS", x: "72%", y: "30%", color: "#C9A84C", onClick: onPlay },
+    { label: "TWIN", x: "58%", y: "70%", color: "#FFD87A", onClick: onTwin },
+  ];
+
+  return (
+    <section className="interactive-video" aria-label={`Interactive video for ${moment.title}`} style={{ minHeight: compact ? 300 : 430 }}>
+      <div style={{ position: "relative", zIndex: 1, minHeight: compact ? 300 : 430, padding: compact ? 22 : 26, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 18, alignItems: "start" }}>
+          <div>
+            <div className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8", marginBottom: 10 }}>
+              INTERACTIVE STORY VIDEO
+            </div>
+            <div className="bebas" style={{ fontSize: compact ? 30 : 38, letterSpacing: 3, color: "#F0EBE3", lineHeight: 1 }}>
+              {moment.title}
+            </div>
+          </div>
+          <div className="mono" style={{ flexShrink: 0, fontSize: 8, letterSpacing: 2, color: cfg.color, border: `1px solid ${cfg.color}55`, padding: "6px 8px" }}>
+            {cfg.label}
+          </div>
+        </div>
+
+        <button onClick={onPlay} aria-label={`Play interactive story for ${moment.title}`} style={{ alignSelf: "center", width: compact ? 86 : 104, height: compact ? 86 : 104, borderRadius: "50%", border: "1px solid rgba(201,168,76,0.48)", background: "rgba(8,8,8,0.58)", color: "#C9A84C", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 38px rgba(201,168,76,0.18)" }}>
+          <span className="bebas" style={{ fontSize: compact ? 34 : 42, letterSpacing: 2, transform: "translateX(2px)" }}>▶</span>
+        </button>
+
+        {hotspots.map((h, i) => (
+          <button key={h.label} onClick={h.onClick} className="hotspot mono" style={{ position: "absolute", left: h.x, top: h.y, transform: "translate(-50%,-50%)", width: 12, height: 12, borderRadius: "50%", border: `1px solid ${h.color}`, background: h.color, cursor: "pointer" }} aria-label={`${h.label} hotspot`}>
+            <span style={{ position: "absolute", left: 16, top: -4, color: h.color, fontSize: 8, letterSpacing: 2, whiteSpace: "nowrap", animationDelay: `${i * 0.2}s` }}>{h.label}</span>
+          </button>
+        ))}
+
+        <div>
+          <div style={{ display: "flex", gap: 7, marginBottom: 13, alignItems: "center" }}>
+            {[0,1,2,3,4,5,6].map(i => (
+              <div key={i} style={{ flex: 1, height: 18, transformOrigin: "center", background: i * 16 < clampedProgress ? "rgba(201,168,76,0.62)" : "rgba(255,255,255,0.08)", animation: `videoPulse 1.4s ease-in-out ${i * 0.08}s infinite` }} />
+            ))}
+          </div>
+          <div style={{ height: 3, background: "rgba(255,255,255,0.1)", marginBottom: 12 }}>
+            <div style={{ height: "100%", width: `${clampedProgress}%`, background: "linear-gradient(90deg,#7BC8E8,#C9A84C,#FFD87A)", transition: "width 0.3s ease" }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+            <div className="mono" style={{ fontSize: 8, color: "#777", letterSpacing: 1 }}>{moment.y} · {source.level}</div>
+            <div className="mono" style={{ fontSize: 8, color: "#555", letterSpacing: 1 }}>CAPTIONS · HOTSPOTS · PROOF</div>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -595,15 +670,15 @@ function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin, onSou
           </div>
         </div>
 
-        <aside className="story-panel" style={{ flex: "0 1 380px", padding: 26, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 24 }}>
-          <div>
-            <div className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8", marginBottom: 14 }}>LIVE STORY CARD</div>
-            <div style={{ aspectRatio: "1 / 1", background: `radial-gradient(circle,${cfg.color}33,transparent 62%),#0b0b0b`, border: `1px solid ${cfg.color}33`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18 }}>
-              <span className="bebas" style={{ fontSize: 82, letterSpacing: 6, color: cfg.color }}>{athlete.initials}</span>
-            </div>
-            <div className="bebas" style={{ fontSize: 26, letterSpacing: 3, color: "#F0EBE3", marginBottom: 8 }}>{moment.era}</div>
-            <div style={{ fontSize: 13, color: "rgba(240,235,227,0.48)", lineHeight: 1.65 }}>{athlete.teams}</div>
-          </div>
+        <aside className="story-panel" style={{ flex: "0 1 430px", padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 18 }}>
+          <InteractiveStoryVideo
+            athlete={athlete}
+            moment={moment}
+            progress={progress}
+            onPlay={complete ? () => onTwin("qa") : next}
+            onSource={onSource}
+            onTwin={() => onTwin("qa")}
+          />
 
           <div>
             <button onClick={onSource} className="proof-btn mono" style={{ width: "100%", fontSize: 9, letterSpacing: 2, padding: "12px 14px", color: "#7BC8E8", background: "rgba(123,200,232,0.04)", border: "1px solid rgba(123,200,232,0.24)", cursor: "pointer", marginBottom: 10 }}>OPEN VERIFIED SOURCE SHEET</button>
