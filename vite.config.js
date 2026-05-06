@@ -1,6 +1,21 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 
+let hasWarnedTwinEnv = false;
+
+function normalizeTwinEnv(rawEnv = {}) {
+  const apiKey = String(rawEnv.ANTHROPIC_API_KEY || "").trim();
+  const model = String(rawEnv.ANTHROPIC_MODEL || "").trim() || "claude-sonnet-4-20250514";
+  const hasUsableApiKey = apiKey.length >= 20;
+  return { apiKey, model, hasUsableApiKey };
+}
+
+function warnTwinEnv(message) {
+  if (hasWarnedTwinEnv) return;
+  hasWarnedTwinEnv = true;
+  console.warn(`[ricon:twin-api] ${message}`);
+}
+
 function readJson(req) {
   return new Promise((resolve, reject) => {
     let body = "";
@@ -47,11 +62,59 @@ function writeError(res, statusCode, message) {
   res.end(message);
 }
 
+function writeJson(res, statusCode, payload) {
+  res.statusCode = statusCode;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.end(JSON.stringify(payload));
+}
+
+function writeUnavailableError(res) {
+  res.statusCode = 503;
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("X-RICON-Companion-Fallback", "service-unavailable");
+  res.end("The AI companion is temporarily unavailable right now. You can keep exploring the verified story timeline and try again in a moment.");
+}
+
+function companionHealthPayload(twinEnv) {
+  if (!twinEnv.hasUsableApiKey) {
+    return {
+      status: "degraded",
+      reason: "configuration-incomplete",
+      message: "Companion is running in fallback mode for this environment."
+    };
+  }
+  return {
+    status: "available",
+    reason: "ready",
+    message: "Companion service is ready."
+  };
+}
+
 function twinApiPlugin() {
   return {
     name: "ricon-twin-api",
     configureServer(server) {
       const env = loadEnv(server.config.mode, process.cwd(), "");
+      const twinEnv = normalizeTwinEnv(env);
+      if (!twinEnv.hasUsableApiKey) {
+        warnTwinEnv("ANTHROPIC_API_KEY is missing or invalid. /api/twin will use safe local fallback replies in development.");
+      }
+
+      server.middlewares.use("/api/twin/health", (req, res) => {
+        if (req.method !== "GET") {
+          writeError(res, 405, "Method not allowed. Use GET to fetch companion health.");
+          return;
+        }
+        try {
+          writeJson(res, 200, companionHealthPayload(twinEnv));
+        } catch {
+          writeJson(res, 503, {
+            status: "unavailable",
+            reason: "health-check-failed",
+            message: "Companion status is temporarily unavailable."
+          });
+        }
+      });
 
       server.middlewares.use("/api/twin", async (req, res) => {
         if (req.method !== "POST") {
@@ -67,7 +130,8 @@ function twinApiPlugin() {
           res.setHeader("Cache-Control", "no-cache, no-transform");
           res.setHeader("X-Accel-Buffering", "no");
 
-          if (!env.ANTHROPIC_API_KEY) {
+          if (!twinEnv.hasUsableApiKey) {
+            res.setHeader("X-RICON-Companion-Fallback", "env-missing");
             await writeFallbackStream(res, fallbackTwinReply(athlete, messages));
             return;
           }
@@ -76,11 +140,11 @@ function twinApiPlugin() {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "x-api-key": env.ANTHROPIC_API_KEY,
+              "x-api-key": twinEnv.apiKey,
               "anthropic-version": "2023-06-01"
             },
             body: JSON.stringify({
-              model: env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
+              model: twinEnv.model,
               max_tokens: 1000,
               stream: true,
               system,
@@ -88,8 +152,19 @@ function twinApiPlugin() {
             })
           });
 
+          if ((upstream.status === 401 || upstream.status === 403) && athlete) {
+            warnTwinEnv("Anthropic credentials were rejected. Falling back to local development companion replies.");
+            res.setHeader("X-RICON-Companion-Fallback", "auth-invalid");
+            await writeFallbackStream(res, fallbackTwinReply(athlete, messages));
+            return;
+          }
+
           if (!upstream.ok || !upstream.body) {
             const data = await upstream.json().catch(() => ({}));
+            if (upstream.status >= 500) {
+              writeUnavailableError(res);
+              return;
+            }
             writeError(res, upstream.status, data.error?.message || "The Digital Twin provider rejected the request.");
             return;
           }

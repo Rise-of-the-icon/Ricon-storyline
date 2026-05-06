@@ -26,17 +26,31 @@ function streamFromText(text) {
   });
 }
 
-async function streamAnthropic({ system, messages, signal }) {
+function normalizeTwinEnv() {
+  const apiKey = String(process.env.ANTHROPIC_API_KEY || "").trim();
+  const model = String(process.env.ANTHROPIC_MODEL || "").trim() || "claude-sonnet-4-20250514";
+  return {
+    apiKey,
+    model,
+    hasUsableApiKey: apiKey.length >= 20
+  };
+}
+
+function unavailableCompanionMessage() {
+  return "The AI companion is temporarily unavailable right now. You can keep exploring the verified storyline while we reconnect the service.";
+}
+
+async function streamAnthropic({ athlete, system, messages, signal, env }) {
   const upstream = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     signal,
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY,
+      "x-api-key": env.apiKey,
       "anthropic-version": "2023-06-01"
     },
     body: JSON.stringify({
-      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
+      model: env.model,
       max_tokens: 1000,
       stream: true,
       system,
@@ -45,10 +59,27 @@ async function streamAnthropic({ system, messages, signal }) {
   });
 
   if (!upstream.ok || !upstream.body) {
+    if ((upstream.status === 401 || upstream.status === 403) && athlete) {
+      return new Response(streamFromText(fallbackTwinReply(athlete, messages)), {
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "X-RICON-Companion-Fallback": "auth-invalid"
+        }
+      });
+    }
     const data = await upstream.json().catch(() => ({}));
-    return new Response(data.error?.message || "The Digital Twin provider rejected the request.", {
-      status: upstream.status,
-      headers: { "Content-Type": "text/plain; charset=utf-8" }
+    const status = upstream.status >= 500 ? 503 : upstream.status;
+    const message = upstream.status >= 500
+      ? unavailableCompanionMessage()
+      : (data.error?.message || "The Digital Twin provider rejected the request.");
+    return new Response(message, {
+      status,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        ...(status === 503 ? { "X-RICON-Companion-Fallback": "service-unavailable" } : {})
+      }
     });
   }
 
@@ -95,21 +126,26 @@ export default async function handler(request) {
   try {
     const body = await request.json();
     const { athlete, system, messages } = body;
+    const env = normalizeTwinEnv();
 
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!env.hasUsableApiKey) {
       return new Response(streamFromText(fallbackTwinReply(athlete, messages)), {
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
-          "Cache-Control": "no-cache, no-transform"
+          "Cache-Control": "no-cache, no-transform",
+          "X-RICON-Companion-Fallback": "env-missing"
         }
       });
     }
 
-    return streamAnthropic({ system, messages, signal: request.signal });
+    return streamAnthropic({ athlete, system, messages, signal: request.signal, env });
   } catch (error) {
-    return new Response(error.message || "Unable to stream the Digital Twin response.", {
-      status: 500,
-      headers: { "Content-Type": "text/plain; charset=utf-8" }
+    return new Response(unavailableCompanionMessage(), {
+      status: 503,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "X-RICON-Companion-Fallback": "service-unavailable"
+      }
     });
   }
 }

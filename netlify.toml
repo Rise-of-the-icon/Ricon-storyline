@@ -6,6 +6,11 @@
   NODE_VERSION = "22"
 
 [[redirects]]
+  from = "/api/twin/health"
+  to = "/.netlify/functions/twin-health"
+  status = 200
+
+[[redirects]]
   from = "/api/twin"
   to = "/.netlify/functions/twin"
   status = 200

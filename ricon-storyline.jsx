@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { configureHaptics, triggerHaptic } from "./src/haptics.js";
+import { ErrorState, EmptyState, LoadingState, RetryAction } from "./src/ui/StateStates.jsx";
+import ErrorBoundary from "./src/ui/ErrorBoundary.jsx";
 
 const CSS = `
   :root {
@@ -7,8 +9,22 @@ const CSS = `
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     --safe-left: env(safe-area-inset-left, 0px);
     --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom-ui: max(12px, calc(8px + var(--safe-bottom)));
+    --text-primary: #F0EBE3;
+    --text-body: rgba(240,235,227,0.82);
+    --text-caption: rgba(240,235,227,0.72);
+    --text-meta: #8f8f8f;
+    --text-disabled: #8a8a8a;
+    --focus-ring: #7BC8E8;
+    --error-text: #ffb3b3;
   }
-  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cormorant+Garamond:ital,wght@0,300;0,500;1,300;1,500&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=Space+Mono&display=swap');
+  /* Approved contrast pairings on dark surfaces:
+     --text-primary on #080808/#0c0c0c
+     --text-body on rgba(8,8,8,0.72)+
+     --text-caption on rgba(8,8,8,0.72)+
+     --text-meta on #080808/#0f0f0f
+     --focus-ring against all dark interactive backgrounds */
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
   ::-webkit-scrollbar { width: 3px; }
   ::-webkit-scrollbar-track { background: #080808; }
@@ -26,13 +42,13 @@ const CSS = `
   @keyframes hotspotPulse { 0%,100%{box-shadow:0 0 0 0 rgba(123,200,232,0.2);} 50%{box-shadow:0 0 0 9px rgba(123,200,232,0);} }
   @keyframes voiceBar { 0%,100%{height:8px;opacity:0.35;} 50%{height:28px;opacity:1;} }
   @keyframes streamShimmer { 0%{background-position:-200% center;} 100%{background-position:200% center;} }
-  .ricon-root { background:#080808; min-height:100dvh; color:#F0EBE3; font-family:"DM Sans",sans-serif; overflow-x:hidden; }
+  .ricon-root { background:#080808; min-height:100vh; min-height:100dvh; color:#F0EBE3; font-family:"Inter",sans-serif; overflow-x:hidden; }
   html, body { max-width:100%; overflow-x:hidden; }
   button { font: inherit; }
-  button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline:2px solid #7BC8E8; outline-offset:3px; }
-  .bebas { font-family:"Bebas Neue",sans-serif; }
-  .cormorant { font-family:"Cormorant Garamond",serif; }
-  .mono { font-family:"Space Mono",monospace; }
+  button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline:2px solid var(--focus-ring); outline-offset:3px; }
+  .bebas { font-family:"Inter",sans-serif; }
+  .cormorant { font-family:"Inter",sans-serif; }
+  .mono { font-family:"Inter",sans-serif; }
   .gold-text { background:linear-gradient(120deg,#C9A84C 0%,#FFD87A 45%,#C9A84C 100%); background-size:200% auto; -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
   .gold-shimmer { animation:goldShimmer 4s linear infinite; }
   .ring-a { animation:ringA 2.4s ease-in-out infinite; }
@@ -53,12 +69,13 @@ const CSS = `
   .mode-btn-active { background:#C9A84C !important; color:#080808 !important; }
   .scanline-fx { pointer-events:none; position:absolute; left:0; right:0; height:80px; background:linear-gradient(transparent,rgba(201,168,76,0.03),transparent); animation:scanline 6s linear infinite; }
   .hero-field { animation:slowDrift 13s ease-in-out infinite; }
-  .story-shell { min-height:100dvh; position:relative; overflow:hidden; background:radial-gradient(circle at 72% 18%,rgba(201,168,76,0.16),transparent 34%),radial-gradient(circle at 18% 70%,rgba(123,200,232,0.1),transparent 30%),#070707; }
+  .story-shell { min-height:100vh; min-height:100dvh; position:relative; overflow:hidden; background:radial-gradient(circle at 72% 18%,rgba(201,168,76,0.16),transparent 34%),radial-gradient(circle at 18% 70%,rgba(123,200,232,0.1),transparent 30%),#070707; }
+  .ricon-root { overflow-x:hidden; }
   .story-panel { background:rgba(12,12,12,0.72); border:1px solid rgba(255,255,255,0.08); backdrop-filter:blur(28px); }
-  .interactive-video { position:relative; overflow:hidden; min-height:320px; background:#090909; border:1px solid rgba(255,255,255,0.08); }
+  .interactive-video { position:relative; overflow:hidden; min-height:320px; aspect-ratio:16 / 9; background:#090909; border:1px solid rgba(255,255,255,0.08); }
   .interactive-video:before { content:""; position:absolute; inset:-20%; background:radial-gradient(circle at 35% 28%,rgba(123,200,232,0.18),transparent 26%),radial-gradient(circle at 68% 62%,rgba(201,168,76,0.22),transparent 30%),linear-gradient(135deg,rgba(255,255,255,0.06),transparent 44%); animation:slowDrift 11s ease-in-out infinite; }
   .interactive-video:after { content:""; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(8,8,8,0.08),rgba(8,8,8,0.54)),repeating-linear-gradient(to bottom,rgba(255,255,255,0.035) 0,rgba(255,255,255,0.035) 1px,transparent 1px,transparent 7px); pointer-events:none; }
-  .timeline-video { position:relative; overflow:hidden; width:min(520px,100%); min-height:154px; margin:18px 0 16px; border:1px solid rgba(255,255,255,0.08); background:#090909; cursor:pointer; }
+  .timeline-video { position:relative; overflow:hidden; width:min(520px,100%); min-height:154px; aspect-ratio:16 / 9; margin:18px 0 16px; border:1px solid rgba(255,255,255,0.08); background:#090909; cursor:pointer; }
   .timeline-video:before { content:""; position:absolute; inset:-30%; background:radial-gradient(circle at 24% 30%,rgba(123,200,232,0.18),transparent 24%),radial-gradient(circle at 74% 68%,rgba(201,168,76,0.22),transparent 30%),linear-gradient(135deg,rgba(255,255,255,0.06),transparent 45%); animation:slowDrift 12s ease-in-out infinite; }
   .timeline-video:after { content:""; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(0,0,0,0.08),rgba(0,0,0,0.62)),repeating-linear-gradient(to bottom,rgba(255,255,255,0.035) 0,rgba(255,255,255,0.035) 1px,transparent 1px,transparent 8px); pointer-events:none; }
   .video-container { position:absolute; inset:0; z-index:0; overflow:hidden; background:#090909; contain:layout paint; }
@@ -66,8 +83,8 @@ const CSS = `
   .media-readable-overlay-strong { background:linear-gradient(180deg,rgba(4,4,4,0.26) 0%,rgba(4,4,4,0.56) 48%,rgba(4,4,4,0.84) 100%),radial-gradient(circle at 50% 36%,rgba(0,0,0,0.12) 0,rgba(0,0,0,0.48) 70%); }
   .media-text-surface { text-shadow:0 2px 18px rgba(0,0,0,0.9),0 1px 2px rgba(0,0,0,0.95); }
   .media-text-surface .bebas, .media-text-surface .cormorant, .media-text-surface .mono { text-shadow:inherit; }
-  .media-copy { color:rgba(255,250,240,0.88) !important; }
-  .media-muted-copy { color:rgba(255,250,240,0.72) !important; }
+  .media-copy { color:var(--text-body) !important; }
+  .media-muted-copy { color:var(--text-caption) !important; }
   .video-container:before { content:""; position:absolute; inset:0; z-index:2; pointer-events:none; background:linear-gradient(180deg,rgba(4,4,4,0.16),rgba(4,4,4,0.42) 48%,rgba(4,4,4,0.68)); }
   .video-media, .video-poster { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; opacity:0.62; }
   .video-poster { background-size:cover; background-position:center; transform:scale(1.03); }
@@ -75,22 +92,36 @@ const CSS = `
   .video-poster { z-index:0; }
   .video-container-poster-only .video-poster { z-index:1; opacity:0.72; }
   .video-overlay { z-index:2; }
-  .video-controls { position:absolute; left:calc(12px + var(--safe-left)); right:calc(12px + var(--safe-right)); bottom:calc(12px + var(--safe-bottom)); z-index:4; display:flex; align-items:center; gap:7px; opacity:0; transform:translateY(5px); transition:opacity 0.2s,transform 0.2s; pointer-events:auto; }
+  .video-controls { position:absolute; left:calc(12px + var(--safe-left)); right:calc(12px + var(--safe-right)); bottom:var(--safe-bottom-ui); z-index:4; display:flex; align-items:center; gap:7px; opacity:0; transform:translateY(5px); transition:opacity 0.2s,transform 0.2s; pointer-events:auto; }
   .interactive-video:hover .video-controls, .timeline-video:hover .video-controls, .video-container:focus-within .video-controls, .video-controls-visible { opacity:1; transform:translateY(0); }
-  .video-control-btn { min-width:32px; height:30px; display:inline-flex; align-items:center; justify-content:center; border:1px solid rgba(201,168,76,0.35); background:rgba(8,8,8,0.72); color:#C9A84C; border-radius:2px; cursor:pointer; font-family:"Space Mono",monospace; font-size:9px; letter-spacing:1px; }
+  .video-control-btn { min-width:32px; height:30px; display:inline-flex; align-items:center; justify-content:center; border:1px solid rgba(201,168,76,0.35); background:rgba(8,8,8,0.72); color:#C9A84C; border-radius:2px; cursor:pointer; font-family:"Inter",sans-serif; font-size:9px; letter-spacing:1px; }
   .video-control-btn:hover { border-color:rgba(201,168,76,0.8); color:#FFD87A; background:rgba(201,168,76,0.1); }
   .video-control-btn:focus-visible { outline:2px solid #7BC8E8; outline-offset:3px; }
   .video-control-btn[aria-pressed="true"] { background:#C9A84C; color:#080808; border-color:#C9A84C; }
+  .video-control-btn-primary { min-width:56px; height:56px; border-radius:50%; font-size:16px; letter-spacing:0; box-shadow:0 0 24px rgba(201,168,76,0.18); }
+  .video-mobile-center-controls { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:5; pointer-events:none; }
+  .video-mobile-center-controls .video-control-btn-primary { pointer-events:auto; }
+  .video-mobile-tap-zone { position:absolute; top:0; bottom:0; width:34%; z-index:3; background:transparent; border:none; cursor:pointer; }
+  .video-mobile-tap-zone-left { left:0; }
+  .video-mobile-tap-zone-right { right:0; }
+  .video-mobile-secondary-menu { position:absolute; right:0; bottom:calc(60px + var(--safe-bottom-ui)); z-index:6; display:flex; flex-direction:column; gap:8px; padding:10px; border:1px solid rgba(201,168,76,0.24); background:rgba(8,8,8,0.92); }
+  .video-doubletap-indicator { position:absolute; top:50%; transform:translateY(-50%); z-index:5; padding:10px 12px; border:1px solid rgba(123,200,232,0.42); background:rgba(8,8,8,0.8); color:#7BC8E8; font-family:"Inter",sans-serif; font-size:10px; letter-spacing:1.5px; pointer-events:none; }
+  .video-doubletap-indicator-left { left:10px; }
+  .video-doubletap-indicator-right { right:10px; }
   .video-control-spacer { flex:1; }
   .timeline-dot { width:36px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; }
-  .timeline-content { flex:1; padding-left:18px; padding-bottom:20px; }
-  .chapter-nav { position:sticky; top:calc(65px + var(--safe-top)); z-index:80; padding:14px calc(40px + var(--safe-right)) 16px calc(40px + var(--safe-left)); display:grid; grid-template-columns:minmax(180px,260px) 1fr; gap:22px; align-items:center; background:rgba(8,8,8,0.88); border-top:1px solid rgba(255,255,255,0.04); border-bottom:1px solid rgba(255,255,255,0.06); backdrop-filter:blur(22px); }
-  .chapter-progress-track { height:2px; background:rgba(255,255,255,0.08); overflow:hidden; }
-  .chapter-progress-fill { height:100%; background:linear-gradient(90deg,#7BC8E8,#C9A84C,#FFD87A); transition:width 0.25s ease; }
-  .chapter-anchor-row { display:flex; align-items:center; gap:6px; min-width:0; overflow-x:auto; scrollbar-width:none; }
-  .chapter-anchor-row::-webkit-scrollbar { display:none; }
-  .chapter-anchor { flex:0 0 auto; min-width:42px; height:32px; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; border:1px solid rgba(255,255,255,0.08); color:#555; background:rgba(255,255,255,0.02); border-radius:2px; transition:color 0.2s,border-color 0.2s,background 0.2s; }
-  .chapter-anchor:hover, .chapter-anchor-active { color:#080808 !important; border-color:rgba(201,168,76,0.85) !important; background:#C9A84C !important; }
+  .timeline-content { flex:1; padding-left:18px; padding-bottom:20px; content-visibility:auto; contain-intrinsic-size:480px; }
+  .timeline-story-card { border:1px solid transparent; padding:10px; margin:-10px; transition:border-color 0.22s ease, background 0.22s ease, transform 0.22s ease; }
+  .timeline-story-card-interactive { cursor:pointer; }
+  .timeline-story-card-interactive:hover { border-color:rgba(201,168,76,0.34); background:rgba(255,255,255,0.02); transform:translateY(-1px); }
+  .timeline-story-card-interactive:focus-visible { outline:2px solid #7BC8E8; outline-offset:3px; border-color:rgba(123,200,232,0.48); background:rgba(123,200,232,0.05); }
+  .timeline-story-card-interactive:active { transform:translateY(0); background:rgba(201,168,76,0.08); }
+  .timeline-status-badge { display:inline-flex; align-items:center; gap:6px; margin-bottom:12px; padding:3px 10px; border-radius:2px; border:1px solid rgba(255,255,255,0.22); font-family:"Inter",sans-serif; font-size:8px; letter-spacing:1.4px; }
+  .timeline-status-badge-disabled { color:var(--text-disabled); border-color:rgba(255,255,255,0.28); background:rgba(255,255,255,0.03); }
+  .story-bottom-action-bar { position:fixed; left:calc(12px + var(--safe-left)); right:calc(12px + var(--safe-right)); bottom:var(--safe-bottom-ui); z-index:95; display:none; gap:8px; padding:8px; border:1px solid rgba(255,255,255,0.12); background:rgba(8,8,8,0.94); backdrop-filter:blur(16px); }
+  .story-bottom-action-bar button { flex:1; min-height:46px; font-family:"Inter",sans-serif; font-size:9px; letter-spacing:1.6px; border-radius:2px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.02); color:#C9A84C; cursor:pointer; }
+  .story-bottom-action-bar button:focus-visible { outline:2px solid var(--focus-ring); outline-offset:2px; }
+  .story-bottom-action-bar button:disabled { color:var(--text-disabled); border-color:rgba(255,255,255,0.2); cursor:not-allowed; }
   .chapter-section { scroll-margin-top:150px; }
   .chapter-kicker { position:sticky; top:calc(146px + var(--safe-top)); z-index:2; display:inline-flex; align-items:center; gap:8px; margin-bottom:12px; padding:4px 9px; background:rgba(8,8,8,0.88); border:1px solid rgba(201,168,76,0.2); backdrop-filter:blur(14px); }
   .hotspot { animation:hotspotPulse 2.4s ease-in-out infinite; }
@@ -104,7 +135,7 @@ const CSS = `
   .stream-caret { display:inline-block; width:7px; height:1.05em; margin-left:4px; vertical-align:-0.12em; background:#C9A84C; animation:dot 1.2s ease-in-out infinite; }
   .stream-shimmer { width:min(340px,72vw); height:12px; border-radius:2px; background:linear-gradient(90deg,rgba(201,168,76,0.08),rgba(201,168,76,0.34),rgba(123,200,232,0.16),rgba(201,168,76,0.08)); background-size:200% 100%; animation:streamShimmer 1s linear infinite; }
   .suggestion-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-  .suggestion-chip { font-family:"Space Mono",monospace; font-size:9px; letter-spacing:1px; padding:9px 12px; color:#C9A84C; background:rgba(201,168,76,0.035); border:1px solid rgba(201,168,76,0.22); border-radius:2px; cursor:pointer; line-height:1.45; text-align:left; transition:border-color 0.2s,color 0.2s,background 0.2s; }
+  .suggestion-chip { font-family:"Inter",sans-serif; font-size:9px; letter-spacing:1px; padding:9px 12px; color:#C9A84C; background:rgba(201,168,76,0.035); border:1px solid rgba(201,168,76,0.22); border-radius:2px; cursor:pointer; line-height:1.45; text-align:left; transition:border-color 0.2s,color 0.2s,background 0.2s; }
   .suggestion-chip:hover { border-color:rgba(201,168,76,0.68); color:#FFD87A; background:rgba(201,168,76,0.08); }
   .suggestion-chip:focus-visible { outline:2px solid #7BC8E8; outline-offset:3px; }
   .assistant-message-bubble { min-height:56px; contain:layout style; overflow-wrap:anywhere; word-break:normal; }
@@ -115,13 +146,13 @@ const CSS = `
   .assistant-markdown ul, .assistant-markdown ol { margin:8px 0 14px 22px; padding:0; }
   .assistant-markdown li { margin:5px 0; padding-left:3px; }
   .assistant-markdown a { color:#7BC8E8; text-decoration:none; border-bottom:1px solid rgba(123,200,232,0.32); overflow-wrap:anywhere; word-break:break-all; }
-  .assistant-markdown code { font-family:"Space Mono",monospace; font-size:0.78em; color:#FFD87A; background:rgba(201,168,76,0.09); border:1px solid rgba(201,168,76,0.16); padding:0.08em 0.32em; border-radius:2px; white-space:break-spaces; overflow-wrap:anywhere; }
+  .assistant-markdown code { font-family:"Inter",sans-serif; font-size:0.78em; color:#FFD87A; background:rgba(201,168,76,0.09); border:1px solid rgba(201,168,76,0.16); padding:0.08em 0.32em; border-radius:2px; white-space:break-spaces; overflow-wrap:anywhere; }
   .assistant-markdown pre { max-width:100%; margin:12px 0 16px; padding:13px 14px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; background:rgba(255,255,255,0.035); border:1px solid rgba(255,255,255,0.08); border-radius:2px; }
   .assistant-markdown pre code { display:block; padding:0; border:none; background:transparent; color:rgba(240,235,227,0.86); white-space:pre-wrap; }
   .assistant-markdown .markdown-pending { border-color:rgba(123,200,232,0.22); background:rgba(123,200,232,0.045); }
   .state-card { border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.03); padding:16px 18px; border-radius:2px; }
   .state-card-title { font-size:9px; letter-spacing:2px; color:#7BC8E8; margin-bottom:8px; }
-  .state-card-copy { font-size:13px; line-height:1.6; color:rgba(240,235,227,0.68); }
+  .state-card-copy { font-size:13px; line-height:1.6; color:var(--text-caption); }
   .skeleton-shimmer { position:relative; overflow:hidden; background:rgba(255,255,255,0.06); border-radius:2px; }
   .skeleton-shimmer:after {
     content:"";
@@ -140,20 +171,20 @@ const CSS = `
     .card-explore { opacity:1 !important; transform:translateY(0) !important; }
     .interactive-video .video-controls, .timeline-video .video-controls { opacity:1; transform:translateY(0); }
     .interactive-video:hover .video-controls, .timeline-video:hover .video-controls { opacity:1; transform:translateY(0); }
-    .video-control-btn:hover, .proof-btn:hover, .story-card-btn:hover, .twin-btn:hover, .back-btn:hover, .suggestion-chip:hover, .chapter-anchor:hover {
+    .video-control-btn:hover, .proof-btn:hover, .story-card-btn:hover, .twin-btn:hover, .back-btn:hover, .suggestion-chip:hover {
       background:inherit;
       color:inherit;
       border-color:inherit;
     }
   }
   @media (pointer: coarse) {
-    button, .chapter-anchor, .suggestion-chip, .video-control-btn, .timeline-video, .proof-btn, .story-card-btn, .twin-btn, .back-btn, .cta-glow {
+    button, .suggestion-chip, .video-control-btn, .timeline-video, .proof-btn, .story-card-btn, .twin-btn, .back-btn, .cta-glow {
       min-height:44px;
       min-width:44px;
     }
-    .chapter-anchor-row { gap:8px; }
     .video-controls { gap:8px; }
     .twin-input-row { gap:10px; }
+    .timeline-story-card-interactive:active { background:rgba(201,168,76,0.16); border-color:rgba(201,168,76,0.44); }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *:before, *:after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
@@ -161,12 +192,21 @@ const CSS = `
     .video-container .video-poster { z-index:1; opacity:0.76; }
   }
   @media (max-width: 768px) {
-    .video-media { display:none !important; }
+    .timeline-video .video-media { display:none !important; }
     .video-container .video-poster { z-index:1; opacity:0.78; transform:none; }
     .media-readable-overlay { background:linear-gradient(180deg,rgba(4,4,4,0.34) 0%,rgba(4,4,4,0.62) 48%,rgba(4,4,4,0.88) 100%),radial-gradient(circle at 50% 32%,rgba(0,0,0,0.18) 0,rgba(0,0,0,0.52) 68%); }
     .media-text-surface { text-shadow:0 2px 16px rgba(0,0,0,0.95),0 1px 2px #000; }
     .scanline-fx, .hero-field, .ring-a, .ring-b, .hotspot, .cta-glow { animation:none !important; }
-    .moment-item, .video-controls, .chapter-progress-fill, .card-root, .card-tagline, .card-explore { transition:none !important; }
+    .moment-item, .video-controls, .card-root, .card-tagline, .card-explore { transition:none !important; }
+    .video-controls { left:calc(10px + var(--safe-left)); right:calc(10px + var(--safe-right)); bottom:max(14px, calc(8px + var(--safe-bottom))); }
+    .video-control-btn { min-width:44px; height:44px; font-size:10px; }
+    .story-bottom-action-bar { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); }
+    .story-has-bottom-bar { padding-bottom:calc(96px + var(--safe-bottom)) !important; }
+  }
+  @media (max-width: 768px) and (orientation: landscape) {
+    .interactive-video { min-height:260px; }
+    .video-controls { bottom:max(10px, calc(6px + var(--safe-bottom))); }
+    .story-bottom-action-bar { bottom:max(8px, calc(6px + var(--safe-bottom))); }
   }
   @media (max-width: 760px) {
     .hide-mobile { display:none !important; }
@@ -174,11 +214,16 @@ const CSS = `
     .home-hero, .athlete-hero, .story-pad { padding-left:20px !important; padding-right:20px !important; }
     .home-hero { grid-template-columns:1fr !important; padding-top:32px !important; min-height:auto !important; }
     .story-layout, .twin-layout { flex-direction:column !important; }
+    .story-main-column { display:contents !important; }
+    .story-copy-block { order:1; }
+    .story-video-column { display:contents !important; }
+    .story-video-block { order:2; }
+    .story-scene-controls { order:3; margin-top:22px !important; }
+    .story-ai-entry { order:4; width:100%; }
+    .story-supporting-card { order:5; margin-top:14px; }
+    .story-pad { gap:18px !important; }
     .twin-sidebar { display:none !important; }
     .timeline-wrap { padding:44px 20px 64px !important; }
-    .chapter-nav { top:calc(57px + var(--safe-top)) !important; grid-template-columns:1fr !important; gap:12px !important; padding:13px calc(18px + var(--safe-right)) 14px calc(18px + var(--safe-left)) !important; }
-    .chapter-anchor-row { margin-left:0; padding-bottom:2px; gap:8px !important; }
-    .chapter-anchor { min-width:44px; height:44px; }
     .chapter-section { scroll-margin-top:172px; }
     .chapter-kicker { position:static !important; max-width:100%; white-space:normal !important; }
     .timeline-heading { margin-bottom:34px !important; line-height:1.7 !important; }
@@ -191,7 +236,7 @@ const CSS = `
     .timeline-title { font-size:28px !important; line-height:1.08 !important; max-width:100% !important; letter-spacing:2px !important; }
     .timeline-body { font-size:16px !important; line-height:1.55 !important; max-width:100% !important; }
     .timeline-video { width:100% !important; min-height:184px !important; margin:18px 0 16px !important; }
-    .twin-modal { overflow-y:auto !important; backdrop-filter:none !important; }
+    .twin-modal { height:100vh !important; height:100dvh !important; overflow:hidden !important; backdrop-filter:none !important; }
     .twin-header { padding:calc(18px + var(--safe-top)) calc(18px + var(--safe-right)) 18px calc(18px + var(--safe-left)) !important; align-items:flex-start !important; gap:14px !important; flex-wrap:wrap !important; }
     .twin-title { width:100% !important; }
     .twin-title .bebas { font-size:34px !important; line-height:1.1 !important; }
@@ -199,13 +244,14 @@ const CSS = `
     .twin-mode-toggle { width:100% !important; }
     .twin-mode-toggle button { flex:1 !important; min-height:44px !important; padding:12px 10px !important; }
     .twin-close { order:3 !important; flex:0 0 auto !important; min-height:44px !important; min-width:44px !important; padding:12px 14px !important; }
-    .twin-chat { padding:42px calc(20px + var(--safe-right)) 28px calc(20px + var(--safe-left)) !important; overflow:visible !important; }
+    .twin-layout { min-height:0 !important; overflow:hidden !important; }
+    .twin-chat { padding:42px calc(20px + var(--safe-right)) 28px calc(20px + var(--safe-left)) !important; overflow-y:auto !important; overflow-x:hidden !important; -webkit-overflow-scrolling:touch; }
     .twin-empty { padding-top:28px !important; }
     .twin-prompt-row { flex-direction:column !important; align-items:stretch !important; }
     .twin-prompt-row button { width:100% !important; min-height:44px !important; padding:13px 14px !important; line-height:1.5 !important; }
     .suggestion-row { flex-direction:column !important; align-items:stretch !important; }
     .suggestion-chip { width:100% !important; min-height:44px !important; padding:13px 14px !important; }
-    .twin-input-bar { padding:16px calc(18px + var(--safe-right)) max(20px, calc(12px + var(--safe-bottom))) calc(18px + var(--safe-left)) !important; position:sticky !important; bottom:0 !important; background:rgba(4,4,4,0.96) !important; }
+    .twin-input-bar { padding:16px calc(18px + var(--safe-right)) max(20px, calc(12px + var(--safe-bottom))) calc(18px + var(--safe-left)) !important; position:sticky !important; bottom:0 !important; background:rgba(4,4,4,0.96) !important; z-index:25 !important; }
     .twin-input-row { flex-direction:column !important; }
     .twin-input-row input, .twin-input-row textarea, .twin-input-row button { width:100% !important; min-height:54px !important; }
     .twin-input-row > * + * { margin-top:8px; }
@@ -215,10 +261,29 @@ const CSS = `
     .assistant-markdown { font-size:17px !important; line-height:1.68 !important; }
     .assistant-markdown pre { font-size:12px; }
     .voice-panel { align-items:flex-start !important; flex-direction:column !important; }
+    .story-title-mobile-fit { font-size:clamp(38px,12vw,66px) !important; letter-spacing:3px !important; line-height:0.94 !important; }
+    .story-context-mobile-fit { font-size:clamp(18px,5.2vw,24px) !important; line-height:1.42 !important; }
+    .home-headline-mobile-fit { font-size:clamp(46px,16vw,88px) !important; letter-spacing:4px !important; line-height:0.9 !important; }
+    .home-hero { gap:22px !important; }
+    .timeline-video, .interactive-video { max-width:100% !important; }
+    .story-layout *, .twin-layout * { max-width:100%; }
+  }
+  @media (max-width: 480px) {
+    .story-pad { padding-top:30px !important; }
+    .story-scene-controls .story-card-btn, .story-scene-controls .cta-glow { flex:1 1 100%; justify-content:center; text-align:center; }
+    .twin-chat { padding-top:26px !important; }
+    .twin-header { gap:10px !important; }
+    .twin-title .bebas { font-size:30px !important; }
+    .story-bottom-action-bar { grid-template-columns:repeat(2,minmax(0,1fr)); }
   }
   @media (max-width: 360px) {
-    .ricon-nav, .twin-header, .chapter-nav, .twin-chat, .twin-input-bar { padding-left:calc(14px + var(--safe-left)) !important; padding-right:calc(14px + var(--safe-right)) !important; }
+    .ricon-nav, .twin-header, .twin-chat, .twin-input-bar { padding-left:calc(14px + var(--safe-left)) !important; padding-right:calc(14px + var(--safe-right)) !important; }
     .twin-title .bebas { font-size:30px !important; letter-spacing:3px !important; }
+  }
+  @supports (height: 100svh) {
+    .ricon-root { min-height:100svh; }
+    .story-shell { min-height:100svh; }
+    .twin-modal { height:100svh; }
   }
 `;
 
@@ -236,7 +301,7 @@ const ATHLETES = [
       {y:"1991",era:"Dynasty I",type:"championship",title:"First Championship",body:"The Bulls defeat the Magic Johnson-led Lakers in five. He averages 31.2 in the Finals. At the trophy ceremony he clutches it and weeps — seven years of pressure released in one single, irreversible moment of truth.",src:"NBA Finals Records, 1991"},
       {y:"1993",era:"Dynasty I",type:"retirement",title:"Three-Peat & Retirement",body:"After three consecutive championships and the murder of his father, Jordan retires at 30. \"I have nothing left to prove.\" The basketball world goes silent and holds its breath. The game has never felt so quiet.",src:"Chicago Tribune, October 1993"},
       {y:"1995",era:"The Return",type:"return",title:"\"I'm Back.\" — Two Words.",body:"A single press release. No press conference. Two words. Thirty-five million viewers tune in for his first game. He wears number 45. The game knows he is back. The game always knew.",src:"AP Wire, March 18 1995"},
-      {y:"1998",era:"Dynasty II",type:"iconic",title:"The Last Shot — Utah, Game 6",body:"5.2 seconds. Down one. Jordan strips the ball from Karl Malone, pushes off Byron Russell, rises and releases. The net moves. Six championships. Six Finals MVPs. One perfect, permanent exit.",src:"NBA Finals Records, June 14 1998"},
+      {y:"1998",era:"Dynasty II",type:"iconic",title:"The Last Shot — Utah, Game 6",body:"5.2 seconds. Down one. Jordan strips the ball from Karl Malone, pushes off Byron Russell, rises and releases. The net moves. Six championships. Six Finals MVPs. One perfect, permanent exit.",src:"NBA Finals Records, June 14 1998",captionSrc:"/captions/jordan-last-shot.vtt",transcript:"[00:00] Delta Center. Finals Game 6.\n[00:08] Jordan strips Malone at the elbow.\n[00:14] He rises over Russell and releases.\n[00:19] The shot drops. Chicago closes the dynasty.",chapters:[{id:"setup",label:"Final possession setup",startTime:0,endTime:8,description:"Chicago sets up the final possession with the score tight."},{id:"steal",label:"Steal on Malone",startTime:8,endTime:14,description:"Jordan reads the post entry and strips Malone cleanly."},{id:"jumper",label:"Pull-up jumper",startTime:14,endTime:19,description:"Jordan crosses into space and rises over Russell."},{id:"close",label:"Championship close",startTime:19,endTime:24,description:"The shot falls and closes the Bulls dynasty in Utah."}],hotspots:[{id:"stakes",label:"High Stakes",description:"Chicago is down one with seconds remaining. One possession decides the title.",startTime:1,endTime:8,x:24,y:24,type:"context"},{id:"steal-source",label:"Verified Source",description:"Primary record: NBA Finals play-by-play and official game report (June 14, 1998).",startTime:8,endTime:14,x:72,y:26,type:"source"},{id:"legacy-quote",label:"Legacy Quote",description:"This sequence became the defining image of Jordan's sixth championship run.",startTime:14,endTime:20,x:58,y:66,type:"quote"},{id:"collectible",label:"Collectible Context",description:"This frame anchors a legacy-proof collectible moment in the RICON archive.",startTime:19,endTime:24,x:30,y:68,type:"collectible"}]},
     ],
   },
   {
@@ -368,25 +433,186 @@ const videoPosterFor = (athlete, moment) => {
     <rect width="1200" height="675" fill="url(#a)"/>
     <rect width="1200" height="675" fill="url(#b)"/>
     <g fill="none" stroke="#ffffff" stroke-opacity=".06">${Array.from({ length: 36 }, (_, i) => `<path d="M0 ${i * 20}H1200"/>`).join("")}</g>
-    <text x="78" y="118" fill="#7BC8E8" font-family="monospace" font-size="22" letter-spacing="10">RICON STORYLINE</text>
-    <text x="78" y="388" fill="#F0EBE3" font-family="Arial Black, Impact, sans-serif" font-size="168" letter-spacing="14">${athlete.initials}</text>
-    <text x="82" y="456" fill="#C9A84C" font-family="monospace" font-size="24" letter-spacing="7">${moment.y} - ${cfg.label}</text>
+    <text x="78" y="118" fill="#7BC8E8" font-family="Inter, sans-serif" font-size="22" letter-spacing="10">RICON STORYLINE</text>
+    <text x="78" y="388" fill="#F0EBE3" font-family="Inter, sans-serif" font-size="168" letter-spacing="14">${athlete.initials}</text>
+    <text x="82" y="456" fill="#C9A84C" font-family="Inter, sans-serif" font-size="24" letter-spacing="7">${moment.y} - ${cfg.label}</text>
   </svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 };
 const videoAssetsFor = (athlete, moment) => ({
-  poster: videoPosterFor(athlete, moment),
-  webm: moment.videoWebm,
-  mp4: moment.videoMp4,
-  // Add caption files per moment with `captionVtt: "/captions/<athlete>-<moment>.vtt"`.
-  captions: moment.captionVtt || moment.captionsVtt,
+  poster: moment?.video?.poster || videoPosterFor(athlete, moment),
+  poster2x: moment?.video?.poster2x || moment.poster2x || moment.posterSrcSet2x || "",
+  webm: moment?.video?.webm || moment.videoWebm,
+  mp4: moment?.video?.mp4 || moment.videoMp4,
+  // Add caption files per moment with `captionSrc` or `captionVtt`.
+  captions: moment?.captions?.src || moment.captionSrc || moment.captionVtt || moment.captionsVtt,
 });
-const storyPanelsFor = (athlete, moment) => [
-  { k: "SETUP", t: `${moment.y} · ${moment.era}`, b: `${athlete.name} enters a defining chapter: ${moment.title}.` },
-  { k: "MOMENT", t: "The verified record", b: moment.body },
-  { k: "LEGACY", t: "Why it matters", b: `${moment.title} becomes part of the larger legacy arc: the moment fans remember, revisit, ask about, and eventually collect.` },
-];
-const chaptersFor = (athlete) => athlete.moments.map((moment, index) => ({
+const transcriptDataFor = (athlete, moment) => {
+  const fallback = {
+    text: `Transcript coming soon for "${moment.title}".\n\nWe are preparing a full, searchable transcript for this verified chapter.\n\nVerified source: ${moment.src}`,
+    chapters: [],
+    isPlaceholder: true
+  };
+  if (!moment?.transcript) return fallback;
+  return {
+    text: moment.transcript,
+    chapters: Array.isArray(moment.chapters) ? moment.chapters : [],
+    isPlaceholder: false
+  };
+};
+const timeToSeconds = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, value);
+  if (typeof value !== "string") return null;
+  const parts = value.split(":").map((part) => Number(part));
+  if (parts.some((part) => Number.isNaN(part))) return null;
+  if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+  if (parts.length === 2) return (parts[0] * 60) + parts[1];
+  if (parts.length === 1) return parts[0];
+  return null;
+};
+const chapterMarkersFor = (moment) => {
+  const raw = Array.isArray(moment?.chapters) ? moment.chapters : [];
+  if (!raw.length) return [];
+  const normalized = raw.map((chapter, index) => {
+    const start = timeToSeconds(chapter.startTime ?? chapter.time);
+    const end = timeToSeconds(chapter.endTime);
+    const markerId = chapter.id || `chapter-marker-${index + 1}`;
+    return {
+      id: markerId,
+      label: chapter.label || `Chapter ${index + 1}`,
+      startTime: start ?? 0,
+      endTime: Number.isFinite(end) ? Math.max(end, start ?? 0) : null,
+      description: chapter.description || chapter.label || `Chapter ${index + 1}`
+    };
+  });
+  return normalized.sort((a, b) => a.startTime - b.startTime).map((chapter, index, arr) => ({
+    ...chapter,
+    endTime: chapter.endTime ?? (arr[index + 1]?.startTime ?? chapter.startTime + 6)
+  }));
+};
+const hotspotDataFor = (moment) => {
+  const raw = Array.isArray(moment?.hotspots) ? moment.hotspots : [];
+  if (!raw.length) return [];
+  return raw
+    .map((hotspot, index) => {
+      const startTime = timeToSeconds(hotspot.startTime);
+      const endTime = timeToSeconds(hotspot.endTime);
+      const x = Number(hotspot.x);
+      const y = Number(hotspot.y);
+      return {
+        id: hotspot.id || `hotspot-${index + 1}`,
+        label: hotspot.label || `Hotspot ${index + 1}`,
+        description: hotspot.description || "Additional verified context for this moment.",
+        startTime: Number.isFinite(startTime) ? Math.max(0, startTime) : 0,
+        endTime: Number.isFinite(endTime) ? Math.max(0, endTime) : ((Number.isFinite(startTime) ? startTime : 0) + 5),
+        x: Number.isFinite(x) ? Math.min(Math.max(x, 8), 92) : 50,
+        y: Number.isFinite(y) ? Math.min(Math.max(y, 16), 74) : 45,
+        type: hotspot.type || "context"
+      };
+    })
+    .sort((a, b) => a.startTime - b.startTime);
+};
+const slugify = (value = "") => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "story";
+const estimateReadTimeFor = (text = "") => {
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean).length;
+  if (!words) return "1 min read";
+  return `${Math.max(1, Math.round(words / 160))} min read`;
+};
+const normalizeScene = ({ storyId, storyTitle, defaultEyebrow, sourceReference }, scene, index = 0) => {
+  const fallbackTitle = ["Setup", "Moment", "Legacy"][index] || `Scene ${index + 1}`;
+  const body = scene?.body || scene?.text || "";
+  return {
+    id: scene?.id || `${storyId}-scene-${index + 1}`,
+    title: scene?.title || fallbackTitle,
+    eyebrow: scene?.eyebrow || defaultEyebrow,
+    body: body || `${storyTitle} scene detail is coming soon.`,
+    duration: scene?.duration || estimateReadTimeFor(body),
+    estimatedReadTime: scene?.estimatedReadTime || estimateReadTimeFor(body),
+    visualState: scene?.visualState || "cinematic",
+    aiContext: scene?.aiContext || `Focus on verified context for ${storyTitle} and keep narrative grounded in documented record.`,
+    sourceReferences: Array.isArray(scene?.sourceReferences) && scene.sourceReferences.length
+      ? scene.sourceReferences
+      : (sourceReference ? [sourceReference] : [])
+  };
+};
+const normalizeStoryData = (athlete, moment, index = 0) => {
+  const title = moment?.title || `Story ${index + 1}`;
+  const slug = moment?.slug || slugify(`${athlete?.id || "athlete"}-${moment?.y || index + 1}-${title}`);
+  const storyId = moment?.id || `${athlete?.id || "athlete"}-${index + 1}-${slug}`;
+  const sourceReference = moment?.src || "";
+  const fallbackScenes = [
+    { title: "Setup", eyebrow: `${moment?.y || "—"} · ${moment?.era || "Era"}`, body: `${athlete?.name || "The athlete"} enters a defining chapter: ${title}.` },
+    { title: "Moment", eyebrow: "Verified record", body: moment?.body || "This verified chapter is being prepared." },
+    { title: "Legacy", eyebrow: "Why it matters", body: `${title} becomes part of the larger legacy arc: the moment fans remember, revisit, ask about, and eventually collect.` }
+  ];
+  const rawScenes = Array.isArray(moment?.scenes) && moment.scenes.length ? moment.scenes : fallbackScenes;
+  const scenes = rawScenes.map((scene, sceneIndex) => normalizeScene({ storyId, storyTitle: title, defaultEyebrow: `${moment?.y || "—"} · ${moment?.era || "Era"}`, sourceReference }, scene, sceneIndex));
+  const collectible = moment?.collectible || collectibleFor(athlete, moment, index);
+  const relatedStories = Array.isArray(moment?.relatedStories) && moment.relatedStories.length
+    ? moment.relatedStories
+    : (athlete?.moments || [])
+      .filter((candidate, candidateIndex) => candidateIndex !== index)
+      .slice(0, 3)
+      .map((candidate, relatedIndex) => ({
+        id: candidate.id || `${athlete.id}-related-${relatedIndex + 1}`,
+        slug: candidate.slug || slugify(`${athlete.id}-${candidate.y}-${candidate.title}`),
+        title: candidate.title,
+        year: candidate.y
+      }));
+  const normalized = {
+    ...moment,
+    id: storyId,
+    slug,
+    title,
+    subtitle: moment?.subtitle || `${moment?.y || "—"} · ${moment?.era || "Era"}`,
+    person: moment?.person || moment?.talent || { id: athlete?.id, name: athlete?.name, initials: athlete?.initials },
+    talent: moment?.talent || { id: athlete?.id, name: athlete?.name, initials: athlete?.initials },
+    year: moment?.year || moment?.y || "",
+    date: moment?.date || moment?.y || "",
+    verificationStatus: moment?.verificationStatus || "verified",
+    sourceStatus: moment?.sourceStatus || (sourceReference ? "source-cited" : "draft"),
+    summary: moment?.summary || moment?.body || "",
+    scenes,
+    video: moment?.video || {
+      poster: videoPosterFor(athlete, moment),
+      webm: moment?.videoWebm || "",
+      mp4: moment?.videoMp4 || ""
+    },
+    captions: moment?.captions || { src: moment?.captionSrc || moment?.captionVtt || moment?.captionsVtt || "" },
+    transcript: moment?.transcript || "",
+    chapters: Array.isArray(moment?.chapters) ? moment.chapters : [],
+    hotspots: Array.isArray(moment?.hotspots) ? moment.hotspots : [],
+    suggestedPrompts: Array.isArray(moment?.suggestedPrompts) && moment.suggestedPrompts.length
+      ? moment.suggestedPrompts
+      : [
+          `What should I notice in "${title}"?`,
+          `Why does "${title}" matter to the legacy arc?`,
+          `What verified source context anchors "${title}"?`
+        ],
+    collectible,
+    marketplace: collectible,
+    relatedStories
+  };
+  return normalized;
+};
+const storyPanelsFor = (athlete, moment) => {
+  const story = normalizeStoryData(athlete, moment, 0);
+  return story.scenes.map((scene, index) => ({
+    k: scene.title.toUpperCase(),
+    t: scene.eyebrow || `${story.year} · ${moment?.era || "Era"}`,
+    b: scene.body,
+    id: scene.id,
+    duration: scene.duration,
+    aiContext: scene.aiContext,
+    sourceReferences: scene.sourceReferences,
+    visualState: scene.visualState,
+    estimatedReadTime: scene.estimatedReadTime,
+    index
+  }));
+};
+const chaptersFor = (athlete) => athlete.moments.map((rawMoment, index) => {
+  const moment = normalizeStoryData(athlete, rawMoment, index);
+  return ({
   id: `chapter-${index + 1}`,
   number: index + 1,
   athlete,
@@ -394,10 +620,41 @@ const chaptersFor = (athlete) => athlete.moments.map((moment, index) => ({
   title: moment.title,
   era: moment.era,
   year: moment.y,
-}));
+  });
+});
 const chapterNumberFromHash = (hash = window.location.hash) => {
-  const match = hash.match(/^#chapter-(\d+)$/);
+  const match = hash.match(/^#chapter-(\d+)(?:\/scene-\d+)?$/);
   return match ? Number(match[1]) : null;
+};
+const sceneNumberFromHash = (hash = window.location.hash) => {
+  const match = hash.match(/^#chapter-\d+\/scene-(\d+)$/);
+  return match ? Number(match[1]) : null;
+};
+const chapterSceneHash = (chapterNumber, sceneNumber = 1) => `#chapter-${chapterNumber}/scene-${sceneNumber}`;
+const STORY_PROGRESS_KEY = "ricon.storyProgress.v1";
+const loadStoryProgress = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(STORY_PROGRESS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+const saveStoryProgress = (value) => {
+  if (typeof window === "undefined") return;
+  try {
+    if (!value) {
+      window.localStorage.removeItem(STORY_PROGRESS_KEY);
+      return;
+    }
+    window.localStorage.setItem(STORY_PROGRESS_KEY, JSON.stringify(value));
+  } catch {
+    // Ignore localStorage write failures.
+  }
 };
 const chapterForContext = (athlete, moment, hash = window.location.hash) => {
   const chapters = chaptersFor(athlete);
@@ -492,7 +749,7 @@ const renderInlineMarkdown = (text, keyPrefix = "inline") => {
     } else if (bold) {
       parts.push(<strong key={key}>{bold}</strong>);
     } else if (italic) {
-      parts.push(<em key={key}>{italic}</em>);
+      parts.push(<span key={key}>{italic}</span>);
     } else if (isSafeUrl(raw)) {
       parts.push(<a key={key} href={raw} target="_blank" rel="noreferrer">{raw}</a>);
     } else {
@@ -620,7 +877,10 @@ RULES — NON-NEGOTIABLE:
 4. Be emotionally resonant. These are your memories. Your legacy. Speak from that place.
 5. Keep all responses under 200 words. Powerful and precise. No filler.
 6. You are not a chatbot. You are a legacy speaking through verified truth.
-7. Reference specific years and moments when relevant to ground your answer in fact.`;
+7. Reference specific years and moments when relevant to ground your answer in fact.
+8. Clearly separate VERIFIED RECORD from NARRATIVE INTERPRETATION.
+9. Never claim unsupported facts are verified.
+10. If uncertain or outside record, transparently state the limitation.`;
 
 export default function RICONStoryline() {
   const initialChapter = chapterNumberFromHash();
@@ -631,11 +891,18 @@ export default function RICONStoryline() {
   const [momentIndex, setMomentIndex] = useState(0);
   const [twinOpen, setTwinOpen] = useState(false);
   const [twinMode, setTwinMode] = useState("narrator");
+  const [savedStoryProgress, setSavedStoryProgress] = useState(() => loadStoryProgress());
+  const [timelineReturnContext, setTimelineReturnContext] = useState(null);
+  const twinTriggerRef = useRef(null);
 
   const openAthlete = (a) => { setAthlete(a); setScreen("athlete"); };
-  const openStory = (a, m, i = 0) => {
+  const openStory = (a, m, i = 0, sceneNumber = 1, options = null) => {
     triggerHaptic("primary");
-    setAthlete(a); setMoment(m); setMomentIndex(i); setScreen("story");
+    window.history.pushState(null, "", chapterSceneHash(i + 1, sceneNumber));
+    if (options?.fromTimeline && options.timelineContext) {
+      setTimelineReturnContext(options.timelineContext);
+    }
+    setAthlete(a); setMoment(normalizeStoryData(a, m, i)); setMomentIndex(i); setScreen("story");
   };
   const goHome = () => {
     window.history.pushState(null, "", "/");
@@ -644,7 +911,48 @@ export default function RICONStoryline() {
   const backToAthlete = () => { setScreen("athlete"); setMoment(null); };
   const openTwin = (mode) => {
     triggerHaptic("success");
+    if (typeof document !== "undefined") twinTriggerRef.current = document.activeElement;
     setTwinMode(mode); setTwinOpen(true);
+  };
+  const closeTwin = () => {
+    setTwinOpen(false);
+    window.setTimeout(() => {
+      if (twinTriggerRef.current && typeof twinTriggerRef.current.focus === "function") {
+        twinTriggerRef.current.focus();
+      }
+    }, 0);
+  };
+  const persistStoryProgress = ({ athleteId, chapterNumber, sceneNumber, videoTime = 0 }) => {
+    const next = {
+      athleteId,
+      chapterNumber: Math.max(1, Number(chapterNumber) || 1),
+      sceneNumber: Math.max(1, Number(sceneNumber) || 1),
+      videoTime: Math.max(0, Number(videoTime) || 0),
+      updatedAt: Date.now()
+    };
+    saveStoryProgress(next);
+    setSavedStoryProgress(next);
+  };
+  const clearStoryProgress = ({ athleteId, chapterNumber } = {}) => {
+    if (athleteId && chapterNumber && savedStoryProgress?.athleteId === athleteId && savedStoryProgress?.chapterNumber === chapterNumber) {
+      saveStoryProgress(null);
+      setSavedStoryProgress(null);
+      return;
+    }
+    if (!athleteId && !chapterNumber) {
+      saveStoryProgress(null);
+      setSavedStoryProgress(null);
+    }
+  };
+  const continueSavedStory = () => {
+    const saved = savedStoryProgress;
+    if (!saved?.athleteId) return;
+    const savedAthlete = ATHLETES.find((item) => item.id === saved.athleteId);
+    if (!savedAthlete) return;
+    const savedIndex = Math.min(Math.max((saved.chapterNumber || 1) - 1, 0), savedAthlete.moments.length - 1);
+    const savedMoment = savedAthlete.moments[savedIndex];
+    if (!savedMoment) return;
+    openStory(savedAthlete, savedMoment, savedIndex, saved.sceneNumber || 1);
   };
 
   useEffect(() => {
@@ -659,6 +967,7 @@ export default function RICONStoryline() {
     link.rel = "preload";
     link.as = "image";
     link.href = href;
+    link.fetchPriority = "high";
     document.head.appendChild(link);
     return () => {
       if (link.parentNode) link.parentNode.removeChild(link);
@@ -668,35 +977,39 @@ export default function RICONStoryline() {
   return (
     <>
       <style>{CSS}</style>
+      <ErrorBoundary scopeLabel="application shell">
       <div className="ricon-root">
         {routeMissing && <NotFoundScreen onHome={goHome} />}
         {!routeMissing && (
           <>
-        {screen === "home" && <HomeScreen onSelect={openAthlete} onStory={openStory} />}
+        {screen === "home" && <HomeScreen onSelect={openAthlete} onStory={openStory} savedStoryProgress={savedStoryProgress} onContinueSavedStory={continueSavedStory} onRestartSavedStory={() => clearStoryProgress()} />}
         {screen === "athlete" && athlete && (
-          <AthleteScreen athlete={athlete} onBack={goHome} onTwin={openTwin} onStory={openStory} />
+          <AthleteScreen athlete={athlete} onBack={goHome} onTwin={openTwin} onStory={openStory} timelineReturnContext={timelineReturnContext} onClearTimelineContext={() => setTimelineReturnContext(null)} />
         )}
         {screen === "story" && athlete && moment && (
-          <StoryView athlete={athlete} moment={moment} momentIndex={momentIndex} onBack={backToAthlete} onHome={goHome} onTwin={openTwin} />
+          <StoryView athlete={athlete} moment={moment} momentIndex={momentIndex} onBack={backToAthlete} onHome={goHome} onTwin={openTwin} onPersistProgress={persistStoryProgress} onRestartProgress={clearStoryProgress} initialVideoTime={savedStoryProgress?.athleteId === athlete.id && savedStoryProgress?.chapterNumber === (momentIndex + 1) ? savedStoryProgress.videoTime : 0} twinOpen={twinOpen} />
         )}
         {twinOpen && athlete && (
-          <Suspense fallback={<div className="mono" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(4,4,4,0.94)", display: "grid", placeItems: "center", letterSpacing: 2, color: "#7BC8E8" }}>LOADING COMPANION...</div>}>
-            <LazyTwinModal
-              athlete={athlete}
-              moment={moment}
-              mode={twinMode}
-              onClose={() => setTwinOpen(false)}
-              onSwitchMode={(m) => setTwinMode(m)}
-              chapterForContext={chapterForContext}
-              suggestionsFor={suggestionsFor}
-              buildSystemPrompt={buildSystemPrompt}
-              persona={TWIN_PERSONA}
-            />
-          </Suspense>
+          <ErrorBoundary scopeLabel="AI companion" resetKeys={[athlete?.id, moment?.title, twinMode]}>
+            <Suspense fallback={<div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(4,4,4,0.94)", display: "grid", placeItems: "center", padding: 20 }}><div style={{ width: "min(560px,100%)" }}><LoadingState label="Loading companion" message="Opening the verified companion channel..." /></div></div>}>
+              <LazyTwinModal
+                athlete={athlete}
+                moment={moment}
+                mode={twinMode}
+                onClose={closeTwin}
+                onSwitchMode={(m) => setTwinMode(m)}
+                chapterForContext={chapterForContext}
+                suggestionsFor={suggestionsFor}
+                buildSystemPrompt={buildSystemPrompt}
+                persona={TWIN_PERSONA}
+              />
+            </Suspense>
+          </ErrorBoundary>
         )}
           </>
         )}
       </div>
+      </ErrorBoundary>
     </>
   );
 }
@@ -708,7 +1021,7 @@ function NotFoundScreen({ onHome }) {
       <div className="story-panel" style={{ width: "min(680px,100%)", padding: "32px 26px", textAlign: "center" }}>
         <div className="mono" style={{ fontSize: 9, color: "#7BC8E8", letterSpacing: 3, marginBottom: 12 }}>RICON STORYLINE · NOT FOUND</div>
         <div className="bebas gold-text" style={{ fontSize: "clamp(44px,9vw,76px)", letterSpacing: 5, lineHeight: 0.95, marginBottom: 14 }}>Chapter Not Found</div>
-        <div className="cormorant" style={{ fontStyle: "italic", fontSize: "clamp(19px,4vw,28px)", color: "rgba(240,235,227,0.75)", lineHeight: 1.45, marginBottom: 18 }}>
+        <div className="cormorant" style={{ fontSize: "clamp(19px,4vw,28px)", color: "rgba(240,235,227,0.75)", lineHeight: 1.45, marginBottom: 18 }}>
           This page is outside the verified storyline archive.
         </div>
         <div style={{ fontSize: 14, color: "rgba(240,235,227,0.52)", lineHeight: 1.65, marginBottom: 24 }}>
@@ -722,10 +1035,15 @@ function NotFoundScreen({ onHome }) {
   );
 }
 
-function HomeScreen({ onSelect, onStory }) {
+function HomeScreen({ onSelect, onStory, savedStoryProgress, onContinueSavedStory, onRestartSavedStory }) {
   const featuredAthlete = getFeaturedAthlete();
   const featuredMoment = getFeaturedMoment();
   const proof = sourceDetailsFor(featuredMoment);
+  const [heroLoading, setHeroLoading] = useState(true);
+  useEffect(() => {
+    const id = window.setTimeout(() => setHeroLoading(false), 260);
+    return () => window.clearTimeout(id);
+  }, []);
   return (
     <div style={{ minHeight: "100dvh", animation: "fadeIn 0.6s ease" }}>
       {/* Nav */}
@@ -741,14 +1059,20 @@ function HomeScreen({ onSelect, onStory }) {
 
       {/* Hero */}
       <div className="home-hero" style={{ padding: "58px 40px 48px", display: "grid", gridTemplateColumns: "1.05fr 0.95fr", gap: 36, alignItems: "center", minHeight: "calc(100dvh - 92px)" }}>
+        {heroLoading ? (
+          <div style={{ gridColumn: "1 / -1", width: "100%" }}>
+            <LoadingState label="Loading featured story" message="Preparing the verified opening chapter." />
+          </div>
+        ) : (
+          <>
         <div style={{ position: "relative", zIndex: 1 }}>
           <div className="mono" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 11px", border: "1px solid rgba(123,200,232,0.28)", color: "#7BC8E8", fontSize: 9, letterSpacing: 2, marginBottom: 26 }}>
             ✓ VERIFIED FEATURED STORY · {proof.level}
           </div>
-          <div className="bebas gold-text gold-shimmer" style={{ fontSize: "clamp(58px,11vw,132px)", letterSpacing: 9, lineHeight: 0.86, marginBottom: 22, display: "block" }}>
+          <div className="bebas gold-text gold-shimmer home-headline-mobile-fit" style={{ fontSize: "clamp(58px,11vw,132px)", letterSpacing: 9, lineHeight: 0.86, marginBottom: 22, display: "block" }}>
             {featuredAthlete.name}
           </div>
-          <div className="cormorant" style={{ fontStyle: "italic", fontSize: "clamp(23px,3vw,38px)", color: "#F0EBE3", lineHeight: 1.25, maxWidth: 720, marginBottom: 22 }}>
+          <div className="cormorant" style={{ fontSize: "clamp(23px,3vw,38px)", color: "#F0EBE3", lineHeight: 1.25, maxWidth: 720, marginBottom: 22 }}>
             {featuredMoment.title}
           </div>
           <div style={{ fontSize: 15, color: "rgba(240,235,227,0.55)", maxWidth: 680, lineHeight: 1.75, marginBottom: 30 }}>
@@ -756,13 +1080,25 @@ function HomeScreen({ onSelect, onStory }) {
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
             <button aria-label={`Start story for ${featuredMoment.title}`} className="cta-glow" onClick={() => onStory(featuredAthlete, featuredMoment, FEATURED.momentIndex)}
-              style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "14px 22px", background: "linear-gradient(135deg,#C9A84C,#FFD87A)", color: "#080808", border: "none", cursor: "pointer", borderRadius: 2 }}>
+              style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "14px 22px", background: "linear-gradient(135deg,#C9A84C,#FFD87A)", color: "#080808", border: "none", cursor: "pointer", borderRadius: 2 }}>
               ▶ START STORY
             </button>
             <button className="story-card-btn" onClick={() => onSelect(featuredAthlete)}
-              style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "14px 22px", background: "rgba(255,255,255,0.02)", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.32)", cursor: "pointer", borderRadius: 2 }}>
-              VIEW TIMELINE
+              style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "14px 22px", background: "rgba(255,255,255,0.02)", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.32)", cursor: "pointer", borderRadius: 2 }}>
+              OPEN TIMELINE
             </button>
+            {savedStoryProgress?.athleteId && (
+              <>
+                <button className="story-card-btn" onClick={onContinueSavedStory}
+                  style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "14px 22px", background: "rgba(123,200,232,0.08)", color: "#7BC8E8", border: "1px solid rgba(123,200,232,0.36)", cursor: "pointer", borderRadius: 2 }}>
+                  CONTINUE WHERE YOU LEFT OFF
+                </button>
+                <button className="story-card-btn" onClick={onRestartSavedStory}
+                  style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "14px 22px", background: "rgba(255,255,255,0.02)", color: "#777", border: "1px solid rgba(255,255,255,0.16)", cursor: "pointer", borderRadius: 2 }}>
+                  RESTART SAVED STORY
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="story-panel" style={{ position: "relative", minHeight: 430, padding: 30, overflow: "hidden" }}>
@@ -779,7 +1115,7 @@ function HomeScreen({ onSelect, onStory }) {
                 </div>
               ))}
             </div>
-            <div className="cormorant" style={{ fontStyle: "italic", fontSize: 20, lineHeight: 1.7, color: "rgba(240,235,227,0.72)", marginBottom: 20 }}>
+            <div className="cormorant" style={{ fontSize: 20, lineHeight: 1.7, color: "rgba(240,235,227,0.72)", marginBottom: 20 }}>
               "{featuredAthlete.tagline}"
             </div>
             <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#555", lineHeight: 1.8 }}>
@@ -787,6 +1123,8 @@ function HomeScreen({ onSelect, onStory }) {
             </div>
           </div>
         </div>
+          </>
+        )}
       </div>
 
       {/* Divider */}
@@ -834,7 +1172,7 @@ function AthleteCard({ athlete, delay, onClick }) {
         {athlete.name}
       </div>
       {/* Tagline */}
-      <div className="cormorant card-tagline" style={{ fontStyle: "italic", fontSize: 13, color: "rgba(240,235,227,0.32)", lineHeight: 1.55, marginBottom: 14, transition: "color 0.3s" }}>
+      <div className="cormorant card-tagline" style={{ fontSize: 13, color: "rgba(240,235,227,0.32)", lineHeight: 1.55, marginBottom: 14, transition: "color 0.3s" }}>
         {athlete.tagline}
       </div>
       {/* Explore CTA */}
@@ -846,17 +1184,23 @@ function AthleteCard({ athlete, delay, onClick }) {
 }
 
 // ─── ATHLETE SCREEN ───────────────────────────────────────────────────────────
-function AthleteScreen({ athlete, onBack, onTwin, onStory }) {
+function AthleteScreen({ athlete, onBack, onTwin, onStory, timelineReturnContext = null, onClearTimelineContext = null }) {
   const leadMoment = athlete.moments.find(m => m.type === "championship" || m.type === "iconic") || athlete.moments[0];
   const leadIndex = athlete.moments.indexOf(leadMoment);
   const chapters = useMemo(() => chaptersFor(athlete), [athlete]);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [activeChapter, setActiveChapter] = useState(() => Math.min(Math.max(chapterNumberFromHash() || 1, 1), chapters.length));
-  const active = chapters[activeChapter - 1] || chapters[0];
   const isProgrammaticScroll = useRef(Boolean(chapterNumberFromHash()));
   const activeChapterRef = useRef(activeChapter);
   const chapterRafRef = useRef(null);
+  const didRestoreRef = useRef(false);
+  const hasReturnContext = timelineReturnContext?.athleteId === athlete.id;
+  const [timelineLoading, setTimelineLoading] = useState(true);
 
+  useEffect(() => {
+    const id = window.setTimeout(() => setTimelineLoading(false), 280);
+    return () => window.clearTimeout(id);
+  }, [athlete.id]);
   useEffect(() => {
     activeChapterRef.current = activeChapter;
   }, [activeChapter]);
@@ -904,7 +1248,7 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory }) {
         activeChapterRef.current = next;
         setActiveChapter(next);
         triggerHaptic("chapter");
-        if (window.location.hash !== `#chapter-${next}`) {
+        if (chapterNumberFromHash(window.location.hash) !== next) {
           window.history.replaceState(null, "", `#chapter-${next}`);
         }
       });
@@ -920,16 +1264,48 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory }) {
     };
   }, [chapters]);
 
-  const jumpToChapter = (event, chapter) => {
-    event.preventDefault();
-    if (window.location.hash === `#${chapter.id}`) {
-      document.getElementById(chapter.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      setActiveChapter(chapter.number);
-      return;
-    }
-    window.history.pushState(null, "", `#${chapter.id}`);
-    window.dispatchEvent(new Event("hashchange"));
+  const openStoryFromTimeline = (targetMoment, index) => {
+    onStory(athlete, targetMoment, index, 1, {
+      fromTimeline: true,
+      timelineContext: {
+        athleteId: athlete.id,
+        chapterNumber: activeChapter,
+        scrollY: window.scrollY
+      }
+    });
   };
+  const scrollToSavedTimelinePosition = () => {
+    if (!hasReturnContext) return;
+    const chapter = Math.min(Math.max(timelineReturnContext.chapterNumber || 1, 1), chapters.length);
+    window.history.replaceState(null, "", `#chapter-${chapter}`);
+    window.scrollTo({ top: Math.max(0, Number(timelineReturnContext.scrollY) || 0), behavior: "smooth" });
+  };
+  useEffect(() => {
+    if (!hasReturnContext || didRestoreRef.current) return;
+    didRestoreRef.current = true;
+    const chapter = Math.min(Math.max(timelineReturnContext.chapterNumber || 1, 1), chapters.length);
+    window.history.replaceState(null, "", `#chapter-${chapter}`);
+    window.setTimeout(() => {
+      window.scrollTo({ top: Math.max(0, Number(timelineReturnContext.scrollY) || 0), behavior: "auto" });
+      setActiveChapter(chapter);
+      onClearTimelineContext?.();
+    }, 0);
+  }, [chapters.length, hasReturnContext, onClearTimelineContext, timelineReturnContext]);
+
+  if (!chapters.length) {
+    return (
+      <div style={{ minHeight: "100dvh", padding: "40px 20px", display: "grid", placeItems: "center" }}>
+        <div style={{ width: "min(680px,100%)" }}>
+          <ErrorState
+            title="Timeline currently unavailable"
+            message="This athlete archive does not have chapter data yet. Return to the roster and choose another verified storyline."
+            ariaLabel="Timeline unavailable"
+            action={<RetryAction label="RETURN TO ROSTER" onRetry={onBack} ariaLabel="Return to roster" />}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100dvh", animation: "fadeIn 0.4s ease" }}>
@@ -942,39 +1318,15 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory }) {
         <div style={{ width: 1, height: 16, background: "#252525" }} />
         <span className="bebas" style={{ fontSize: 15, letterSpacing: 5, color: "rgba(240,235,227,0.3)" }}>RICON STORYLINE</span>
         <div style={{ flex: 1 }} />
+        {hasReturnContext && (
+          <button className="story-card-btn mono" onClick={scrollToSavedTimelinePosition} style={{ fontSize: 8, letterSpacing: 2, color: "#7BC8E8", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(123,200,232,0.32)", padding: "9px 10px", cursor: "pointer", borderRadius: 2 }}>
+            BACK TO CURRENT TIMELINE POSITION
+          </button>
+        )}
         <button className="cta-glow" onClick={() => onTwin("narrator")}
-          style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 3, color: "#080808", background: "linear-gradient(135deg,#C9A84C,#FFD87A)", border: "none", padding: "10px 20px", cursor: "pointer", borderRadius: 2 }}>
+          style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 3, color: "#080808", background: "linear-gradient(135deg,#C9A84C,#FFD87A)", border: "none", padding: "10px 20px", cursor: "pointer", borderRadius: 2 }}>
           ◉ ACTIVATE DIGITAL TWIN
         </button>
-      </nav>
-
-      <nav className="chapter-nav" aria-label={`${athlete.name} story chapters`}>
-        <div style={{ minWidth: 0 }}>
-          <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#7BC8E8", marginBottom: 7 }}>
-            CHAPTER {active.number}/{chapters.length}
-          </div>
-          <div className="bebas" style={{ fontSize: 20, letterSpacing: 3, color: "#F0EBE3", lineHeight: 1.05, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {active.title}
-          </div>
-          <div className="chapter-progress-track" aria-hidden="true" style={{ marginTop: 11 }}>
-            <div className="chapter-progress-fill" style={{ width: `${(active.number / chapters.length) * 100}%` }} />
-          </div>
-        </div>
-        <div className="chapter-anchor-row">
-          {chapters.map((chapter) => (
-            <a
-              key={chapter.id}
-              href={`#${chapter.id}`}
-              onClick={(event) => jumpToChapter(event, chapter)}
-              className={`chapter-anchor mono ${activeChapter === chapter.number ? "chapter-anchor-active" : ""}`}
-              aria-current={activeChapter === chapter.number ? "location" : undefined}
-              aria-label={`Jump to chapter ${chapter.number}: ${chapter.title}`}
-              style={{ fontSize: 9, letterSpacing: 1 }}
-            >
-              {String(chapter.number).padStart(2, "0")}
-            </a>
-          ))}
-        </div>
       </nav>
 
       {/* Hero */}
@@ -982,18 +1334,18 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory }) {
         <div className="bebas" style={{ position: "absolute", bottom: -60, right: 10, fontSize: 300, letterSpacing: 8, color: "rgba(201,168,76,0.022)", lineHeight: 1, userSelect: "none", pointerEvents: "none" }}>
           {athlete.initials}
         </div>
-        <div className="cormorant" style={{ fontStyle: "italic", fontSize: 15, color: "#7BC8E8", letterSpacing: 4, marginBottom: 18 }}>
+        <div className="cormorant" style={{ fontSize: 15, color: "#7BC8E8", letterSpacing: 4, marginBottom: 18 }}>
           {athlete.position} · {athlete.teams}
         </div>
         <h1 className="bebas" style={{ fontSize: "clamp(58px,9vw,108px)", letterSpacing: 6, lineHeight: 0.9, marginBottom: 22, background: "linear-gradient(135deg,#F0EBE3 0%,#C9A84C 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
           {athlete.name}
         </h1>
-        <div className="cormorant" style={{ fontStyle: "italic", fontSize: 20, color: "rgba(240,235,227,0.38)", maxWidth: 580, lineHeight: 1.65 }}>
+        <div className="cormorant" style={{ fontSize: 20, color: "rgba(240,235,227,0.38)", maxWidth: 580, lineHeight: 1.65 }}>
           "{athlete.tagline}"
         </div>
         <div style={{ marginTop: 30, display: "flex", flexWrap: "wrap", gap: 12 }}>
-          <button onClick={() => onStory(athlete, leadMoment, leadIndex)} className="cta-glow"
-            style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 20px", background: "linear-gradient(135deg,#C9A84C,#FFD87A)", color: "#080808", border: "none", cursor: "pointer", borderRadius: 2 }}>
+          <button onClick={() => openStoryFromTimeline(leadMoment, leadIndex)} className="cta-glow"
+            style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "13px 20px", background: "linear-gradient(135deg,#C9A84C,#FFD87A)", color: "#080808", border: "none", cursor: "pointer", borderRadius: 2 }}>
             ▶ PLAY FEATURED MOMENT
           </button>
         </div>
@@ -1009,17 +1361,6 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory }) {
         </div>
       </div>
 
-      <div className="athlete-hero" style={{ padding: "0 40px 34px" }}>
-        <InteractiveStoryVideo
-          athlete={athlete}
-          moment={leadMoment}
-          compact
-          progress={72}
-          onPlay={() => onStory(athlete, leadMoment, leadIndex)}
-          onTwin={() => onTwin("qa")}
-        />
-      </div>
-
       {/* Twin activation banner */}
       <div style={{ margin: "0 40px", padding: "22px 28px", background: "linear-gradient(135deg,rgba(201,168,76,0.07),rgba(123,200,232,0.04))", border: "1px solid rgba(201,168,76,0.18)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24, flexWrap: "wrap" }}>
         <div>
@@ -1029,8 +1370,8 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory }) {
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={() => onTwin("narrator")} style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "11px 20px", background: "#C9A84C", color: "#080808", border: "none", cursor: "pointer", borderRadius: 2 }}>▶ NARRATOR</button>
-          <button className="twin-btn" onClick={() => onTwin("qa")} style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "11px 20px", background: "transparent", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.35)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>✦ ASK ME ANYTHING</button>
+          <button onClick={() => onTwin("narrator")} style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "11px 20px", background: "#C9A84C", color: "#080808", border: "none", cursor: "pointer", borderRadius: 2 }}>▶ NARRATOR</button>
+          <button className="twin-btn" onClick={() => onTwin("qa")} style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "11px 20px", background: "transparent", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.35)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>✦ ASK ME ANYTHING</button>
         </div>
       </div>
 
@@ -1039,17 +1380,23 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory }) {
         <div className="timeline-heading mono" style={{ fontSize: 10, letterSpacing: 6, color: "#3a3a3a", marginBottom: 56 }}>
           CAREER TIMELINE · {athlete.moments.length} VERIFIED MOMENTS
         </div>
-        <div style={{ position: "relative" }}>
-          <div className="timeline-line" style={{ position: "absolute", left: 114, top: 0, bottom: 0, width: 1, transform: "translateX(-0.5px)", background: "linear-gradient(to bottom,transparent,rgba(201,168,76,0.28) 8%,rgba(201,168,76,0.28) 92%,transparent)" }} />
-          {chapters.map((chapter, i) => <TimelineMoment key={chapter.id} chapter={chapter} athlete={athlete} moment={chapter.moment} index={i} total={chapters.length} active={activeChapter === chapter.number} reduceMotion={reducedMotion} onStory={() => onStory(athlete, chapter.moment, i)} />)}
-        </div>
+        <ErrorBoundary scopeLabel="timeline" resetKeys={[athlete.id, chapters.length]}>
+          {timelineLoading ? (
+            <LoadingState label="Loading timeline" message="Syncing verified moments for this athlete." />
+          ) : (
+            <div style={{ position: "relative" }}>
+              <div className="timeline-line" style={{ position: "absolute", left: 114, top: 0, bottom: 0, width: 1, transform: "translateX(-0.5px)", background: "linear-gradient(to bottom,transparent,rgba(201,168,76,0.28) 8%,rgba(201,168,76,0.28) 92%,transparent)" }} />
+              {chapters.map((chapter, i) => <TimelineMoment key={chapter.id} chapter={chapter} athlete={athlete} moment={chapter.moment} index={i} total={chapters.length} active={activeChapter === chapter.number} reduceMotion={reducedMotion} onStory={() => openStoryFromTimeline(chapter.moment, i)} />)}
+            </div>
+          )}
+        </ErrorBoundary>
       </div>
 
       {/* Bottom CTA */}
       <div style={{ padding: "52px 40px", borderTop: "1px solid rgba(255,255,255,0.05)", textAlign: "center" }}>
-        <div className="cormorant" style={{ fontStyle: "italic", fontSize: 20, color: "rgba(240,235,227,0.3)", marginBottom: 24 }}>The story doesn't end here.</div>
+        <div className="cormorant" style={{ fontSize: 20, color: "rgba(240,235,227,0.3)", marginBottom: 24 }}>The story doesn't end here.</div>
         <button className="twin-btn" onClick={() => onTwin("qa")}
-          style={{ fontFamily: '"Bebas Neue"', fontSize: 15, letterSpacing: 4, padding: "14px 38px", background: "transparent", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.4)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
+          style={{ fontFamily: '"Inter"', fontSize: 15, letterSpacing: 4, padding: "14px 38px", background: "transparent", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.4)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
           ASK THE DIGITAL TWIN →
         </button>
       </div>
@@ -1063,6 +1410,21 @@ function TimelineMoment({ chapter, athlete, moment, index, total, active, reduce
   const [visible, setVisible] = useState(reduceMotion);
   const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
   const collectible = collectibleFor(athlete, moment, index);
+  const hasSource = Boolean(moment?.src);
+  const status = String(moment?.status || "").toLowerCase();
+  const unavailable = Boolean(moment?.comingSoon || status === "coming-soon" || status === "comingsoon");
+  const draft = status === "draft";
+  const statusBadges = [
+    { key: "verified", label: "VERIFIED", color: "#7BC8E8", visible: !draft && !unavailable },
+    { key: "draft", label: "DRAFT", color: "#777", visible: draft && !unavailable },
+    { key: "source-cited", label: "SOURCE-CITED", color: "#C9A84C", visible: hasSource && !unavailable },
+    { key: "coming-soon", label: "COMING SOON", color: "#999", visible: unavailable }
+  ].filter((item) => item.visible);
+  const openLabel = unavailable ? `Story not yet published for ${moment.title || chapter.title}. Coming soon.` : `Open story ${chapter.number}: ${moment.title}. ${moment.y}, ${moment.era}.`;
+  const handleOpen = () => {
+    if (unavailable) return;
+    onStory?.();
+  };
 
   useEffect(() => {
     if (reduceMotion) {
@@ -1097,25 +1459,48 @@ function TimelineMoment({ chapter, athlete, moment, index, total, active, reduce
         </div>
         {/* Content */}
         <div className="timeline-content" style={{ borderBottom: index < total - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+          <div
+            className={`timeline-story-card ${unavailable ? "" : "timeline-story-card-interactive"}`}
+            role={unavailable ? "group" : "button"}
+            tabIndex={unavailable ? -1 : 0}
+            aria-label={openLabel}
+            aria-disabled={unavailable || undefined}
+            onClick={handleOpen}
+            onKeyDown={(event) => {
+              if (unavailable) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                handleOpen();
+              }
+            }}
+          >
           <div className="chapter-kicker mono" style={{ color: active ? "#C9A84C" : "#555", letterSpacing: 2, fontSize: 8 }}>
             CHAPTER {String(chapter.number).padStart(2, "0")} <span style={{ color: "#333" }}>·</span> {chapter.era}
           </div>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 12, padding: "3px 10px", border: `1px solid ${cfg.color}40`, borderRadius: 2 }}>
             <span className="mono" style={{ fontSize: 9, letterSpacing: 2, color: cfg.color }}>{cfg.icon} {cfg.label}</span>
           </div>
+          {statusBadges.map((badge) => (
+            <div key={badge.key} className={`timeline-status-badge mono ${unavailable ? "timeline-status-badge-disabled" : ""}`} style={{ color: badge.color, borderColor: `${badge.color}66` }}>
+              {badge.label}
+            </div>
+          ))}
           {collectible && (
             <div className="mono" style={{ display: "inline-flex", marginLeft: 8, alignItems: "center", gap: 6, marginBottom: 12, padding: "3px 10px", border: "1px solid rgba(201,168,76,0.32)", borderRadius: 2, color: "#C9A84C", fontSize: 9, letterSpacing: 2 }}>
               OWNABLE MOMENT
             </div>
           )}
-          <button id={`${chapter.id}-title`} onClick={onStory} className="timeline-title story-card-btn bebas" style={{ display: "block", textAlign: "left", fontSize: 24, letterSpacing: 2, color: active ? "#FFD87A" : "#F0EBE3", lineHeight: 1.2, marginBottom: 12, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          <button id={`${chapter.id}-title`} onClick={handleOpen} disabled={unavailable} aria-label={openLabel} className="timeline-title story-card-btn bebas" style={{ display: "block", textAlign: "left", fontSize: 24, letterSpacing: 2, color: unavailable ? "#777" : (active ? "#FFD87A" : "#F0EBE3"), lineHeight: 1.2, marginBottom: 12, background: "none", border: "none", cursor: unavailable ? "not-allowed" : "pointer", padding: 0 }}>
             {moment.title}
           </button>
-          <div className="timeline-body cormorant" style={{ fontStyle: "italic", fontSize: 17, color: "rgba(240,235,227,0.62)", lineHeight: 1.75, marginBottom: 14, maxWidth: 660 }}>{moment.body}</div>
-          <TimelineVideoPreview athlete={athlete} moment={moment} index={index} onPlay={onStory} />
+          <div className="timeline-body cormorant" style={{ fontSize: 17, color: unavailable ? "rgba(240,235,227,0.36)" : "rgba(240,235,227,0.62)", lineHeight: 1.75, marginBottom: 14, maxWidth: 660 }}>{moment.body}</div>
+          <TimelineVideoPreview athlete={athlete} moment={moment} index={index} onPlay={handleOpen} unavailable={unavailable} />
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ width: 8, height: 1, background: "#333" }} />
-            <button onClick={onStory} className="story-card-btn mono" style={{ fontSize: 9, color: "#C9A84C", letterSpacing: 2, background: "transparent", border: "1px solid rgba(201,168,76,0.22)", padding: "6px 10px", cursor: "pointer", borderRadius: 2 }}>PLAY STORY →</button>
+            <button onClick={handleOpen} disabled={unavailable} aria-label={openLabel} className="story-card-btn mono" style={{ fontSize: 9, color: unavailable ? "#555" : "#C9A84C", letterSpacing: 2, background: "transparent", border: "1px solid rgba(201,168,76,0.22)", padding: "6px 10px", cursor: unavailable ? "not-allowed" : "pointer", borderRadius: 2 }}>
+              {unavailable ? "COMING SOON" : "OPEN STORY →"}
+            </button>
+          </div>
           </div>
         </div>
       </div>
@@ -1123,7 +1508,7 @@ function TimelineMoment({ chapter, athlete, moment, index, total, active, reduce
   );
 }
 
-function SafeStoryVideo({ athlete, moment, eager = false, loop = false, autoPlay = false, background = false }) {
+function SafeStoryVideo({ athlete, moment, eager = false, loop = false, autoPlay = false, background = false, chapterMarkers = [], onActiveChapterChange = null, hotspots = [], hotspotsEnabled = true, initialTime = 0, onTimePersist = null }) {
   const ref = useRef(null);
   const videoRef = useRef(null);
   const [inView, setInView] = useState(eager);
@@ -1135,7 +1520,18 @@ function SafeStoryVideo({ athlete, moment, eager = false, loop = false, autoPlay
   const [posterError, setPosterError] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const [mediaError, setMediaError] = useState(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [bufferedRatio, setBufferedRatio] = useState(0);
+  const [activeChapterId, setActiveChapterId] = useState(chapterMarkers[0]?.id || null);
+  const [activeHotspotId, setActiveHotspotId] = useState(null);
+  const [openHotspot, setOpenHotspot] = useState(null);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [doubleTapHint, setDoubleTapHint] = useState(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const lastTapRef = useRef({ side: null, at: 0 });
+  const hideControlsTimerRef = useRef(null);
   const isMobile = useMediaQuery("(max-width: 768px)");
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const assets = useMemo(() => videoAssetsFor(athlete, moment), [athlete, moment]);
@@ -1146,6 +1542,38 @@ function SafeStoryVideo({ athlete, moment, eager = false, loop = false, autoPlay
   const shouldAutoPlay = autoPlay && !posterOnly;
   const shouldLoadPoster = eager || inView || !background;
   const mediaFailed = Boolean(posterError || mediaError);
+  const isMobileControlMode = isMobile && !background;
+  const hasDuration = Number.isFinite(duration) && duration > 0;
+  const playedRatio = hasDuration ? Math.min(Math.max(currentTime / duration, 0), 1) : 0;
+  const videoPreload = background ? "none" : "metadata";
+  const posterBackgroundImage = useMemo(() => {
+    if (!assets.poster2x) return `url("${assets.poster}")`;
+    return `image-set(url("${assets.poster}") 1x, url("${assets.poster2x}") 2x)`;
+  }, [assets.poster, assets.poster2x]);
+  const markerPositions = useMemo(() => {
+    if (!chapterMarkers.length) return [];
+    if (hasDuration) {
+      return chapterMarkers.map((chapter) => ({
+        ...chapter,
+        ratio: Math.min(Math.max(chapter.startTime / duration, 0), 1)
+      }));
+    }
+    return chapterMarkers.map((chapter, index) => ({
+      ...chapter,
+      ratio: chapterMarkers.length === 1 ? 0 : index / (chapterMarkers.length - 1)
+    }));
+  }, [chapterMarkers, duration, hasDuration]);
+  const activeHotspots = useMemo(() => {
+    if (!hotspotsEnabled) return [];
+    return hotspots.filter((hotspot) => currentTime >= hotspot.startTime && currentTime < hotspot.endTime);
+  }, [hotspots, currentTime, hotspotsEnabled]);
+
+  const formatTime = (value) => {
+    const safe = Number.isFinite(value) ? Math.max(0, value) : 0;
+    const mins = Math.floor(safe / 60);
+    const secs = Math.floor(safe % 60);
+    return `${mins}:${String(secs).padStart(2, "0")}`;
+  };
 
   const syncTracks = (enabled) => {
     const tracks = videoRef.current?.textTracks;
@@ -1194,13 +1622,60 @@ function SafeStoryVideo({ athlete, moment, eager = false, loop = false, autoPlay
     video.currentTime = Math.min(Math.max(video.currentTime + seconds, 0), video.duration);
   };
 
+  const handleScrub = (event) => {
+    const video = videoRef.current;
+    if (!video || !hasDuration) return;
+    const next = Number(event.target.value || 0);
+    const clamped = Math.min(Math.max(next, 0), duration);
+    video.currentTime = clamped;
+    setCurrentTime(clamped);
+  };
+  const jumpToChapter = (chapter) => {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(chapter.startTime)) return;
+    video.currentTime = chapter.startTime;
+    setCurrentTime(chapter.startTime);
+    setActiveChapterId(chapter.id);
+    onActiveChapterChange?.(chapter);
+  };
+  const openHotspotPanel = (hotspot) => {
+    videoRef.current?.pause?.();
+    setPlaying(false);
+    setMobileMenuOpen(false);
+    setControlsVisible(true);
+    setOpenHotspot(hotspot);
+    setActiveHotspotId(hotspot.id);
+  };
+  const resumeFromHotspot = () => {
+    setOpenHotspot(null);
+    if (!videoRef.current || mediaFailed) return;
+    videoRef.current.play?.().catch(() => {});
+  };
+  const revealControls = () => {
+    setControlsVisible(true);
+  };
+  const handleTapZone = (side) => {
+    revealControls();
+    if (!shouldLoad || mediaFailed) return;
+    const now = Date.now();
+    const isDoubleTap = lastTapRef.current.side === side && (now - lastTapRef.current.at) < 300;
+    lastTapRef.current = { side, at: now };
+    if (!isDoubleTap) return;
+    const delta = side === "left" ? -10 : 10;
+    seekBy(delta);
+    setDoubleTapHint(delta > 0 ? "+10s" : "-10s");
+  };
+
   useEffect(() => {
     const node = ref.current;
     if (!node) return undefined;
     const observer = new IntersectionObserver(([entry]) => {
       const visible = entry.isIntersecting;
       setInView(visible);
-      if (!visible) videoRef.current?.pause?.();
+      if (!visible) {
+        videoRef.current?.pause?.();
+        setPlaying(false);
+      }
       if (visible && shouldAutoPlay && videoRef.current?.paused) {
         videoRef.current.play?.().catch(() => {});
       }
@@ -1243,6 +1718,10 @@ function SafeStoryVideo({ athlete, moment, eager = false, loop = false, autoPlay
   };
 
   useEffect(() => {
+    if (!shouldLoadPoster) {
+      setPosterLoading(false);
+      return;
+    }
     setPosterLoading(true);
     setPosterError(false);
     setVideoReady(false);
@@ -1251,7 +1730,64 @@ function SafeStoryVideo({ athlete, moment, eager = false, loop = false, autoPlay
     img.onload = () => setPosterLoading(false);
     img.onerror = () => { setPosterLoading(false); setPosterError(true); };
     img.src = assets.poster;
-  }, [assets.poster, reloadToken]);
+  }, [assets.poster, reloadToken, shouldLoadPoster]);
+
+  useEffect(() => {
+    if (!videoRef.current) return;
+    setCurrentTime(0);
+    setDuration(0);
+    setBufferedRatio(0);
+    setActiveChapterId(chapterMarkers[0]?.id || null);
+    setActiveHotspotId(null);
+    setOpenHotspot(null);
+    setControlsVisible(true);
+    setMobileMenuOpen(false);
+  }, [moment.title, reloadToken]);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(initialTime) || initialTime <= 0) return;
+    const apply = () => {
+      const max = Number.isFinite(video.duration) && video.duration > 0 ? Math.max(video.duration - 0.25, 0) : initialTime;
+      const nextTime = Math.min(Math.max(initialTime, 0), max);
+      video.currentTime = nextTime;
+      setCurrentTime(nextTime);
+    };
+    if (Number.isFinite(video.duration) && video.duration > 0) apply();
+    else video.addEventListener("loadedmetadata", apply, { once: true });
+    return () => {
+      video.removeEventListener("loadedmetadata", apply);
+    };
+  }, [initialTime, reloadToken, moment.title]);
+  useEffect(() => {
+    if (typeof onTimePersist !== "function" || !hasDuration) return;
+    onTimePersist(currentTime);
+  }, [currentTime, hasDuration, onTimePersist]);
+  useEffect(() => {
+    if (!chapterMarkers.length) return;
+    const active = chapterMarkers.find((chapter) => currentTime >= chapter.startTime && currentTime < chapter.endTime) || chapterMarkers[chapterMarkers.length - 1];
+    if (!active || active.id === activeChapterId) return;
+    setActiveChapterId(active.id);
+    onActiveChapterChange?.(active);
+  }, [chapterMarkers, currentTime, activeChapterId, onActiveChapterChange]);
+  useEffect(() => {
+    if (!openHotspot) return;
+    const stillActive = activeHotspots.some((hotspot) => hotspot.id === openHotspot.id);
+    if (!stillActive) setOpenHotspot(null);
+  }, [activeHotspots, openHotspot]);
+  useEffect(() => {
+    if (!isMobileControlMode) return undefined;
+    if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    if (!playing || !controlsVisible || mobileMenuOpen || openHotspot) return undefined;
+    hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2200);
+    return () => {
+      if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    };
+  }, [isMobileControlMode, playing, controlsVisible, mobileMenuOpen, openHotspot, currentTime]);
+  useEffect(() => {
+    if (!doubleTapHint) return undefined;
+    const timeout = setTimeout(() => setDoubleTapHint(null), 700);
+    return () => clearTimeout(timeout);
+  }, [doubleTapHint]);
 
   return (
     <div
@@ -1261,8 +1797,13 @@ function SafeStoryVideo({ athlete, moment, eager = false, loop = false, autoPlay
       role="group"
       aria-label={`${moment.title} video controls`}
       onKeyDown={handleKeyDown}
+      onClick={(event) => {
+        if (!isMobileControlMode) return;
+        if (event.target instanceof HTMLButtonElement || event.target instanceof HTMLInputElement) return;
+        revealControls();
+      }}
     >
-      <div className="video-poster" style={{ backgroundImage: shouldLoadPoster ? `url("${assets.poster}")` : "none" }} />
+      <div className="video-poster" style={{ backgroundImage: shouldLoadPoster ? posterBackgroundImage : "none" }} />
       {shouldLoad && (
         <video
           key={`${moment.title}-${reloadToken}`}
@@ -1271,7 +1812,7 @@ function SafeStoryVideo({ athlete, moment, eager = false, loop = false, autoPlay
           muted={muted}
           playsInline
           playsinline="true"
-          preload="metadata"
+          preload={videoPreload}
           poster={assets.poster}
           loop={loop}
           autoPlay={shouldAutoPlay}
@@ -1280,7 +1821,34 @@ function SafeStoryVideo({ athlete, moment, eager = false, loop = false, autoPlay
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
           onCanPlay={() => setVideoReady(true)}
-          onLoadedMetadata={() => syncTracks(captionsOn)}
+          onLoadedMetadata={(event) => {
+            const video = event.currentTarget;
+            setDuration(Number.isFinite(video.duration) ? video.duration : 0);
+            setCurrentTime(Number.isFinite(video.currentTime) ? video.currentTime : 0);
+            syncTracks(captionsOn);
+          }}
+          onDurationChange={(event) => {
+            const nextDuration = event.currentTarget.duration;
+            if (Number.isFinite(nextDuration)) setDuration(nextDuration);
+          }}
+          onTimeUpdate={(event) => {
+            const nextTime = event.currentTarget.currentTime;
+            if (Number.isFinite(nextTime)) setCurrentTime(nextTime);
+          }}
+          onProgress={(event) => {
+            const video = event.currentTarget;
+            if (!Number.isFinite(video.duration) || video.duration <= 0) {
+              setBufferedRatio(0);
+              return;
+            }
+            const { buffered } = video;
+            if (!buffered || buffered.length === 0) {
+              setBufferedRatio(0);
+              return;
+            }
+            const bufferedEnd = buffered.end(buffered.length - 1);
+            setBufferedRatio(Math.min(Math.max(bufferedEnd / video.duration, 0), 1));
+          }}
           onError={() => setMediaError("Video stream unavailable for this moment.")}
         >
           {assets.webm && <source src={assets.webm} type="video/webm" />}
@@ -1289,56 +1857,166 @@ function SafeStoryVideo({ athlete, moment, eager = false, loop = false, autoPlay
         </video>
       )}
       <div className="video-overlay media-readable-overlay" />
+      {activeHotspots.length > 0 && (
+        <div aria-label="Interactive video hotspots" style={{ position: "absolute", inset: 0, zIndex: 3, pointerEvents: "none" }}>
+          {activeHotspots.map((hotspot) => (
+            <button
+              key={hotspot.id}
+              type="button"
+              className="hotspot mono"
+              onClick={() => openHotspotPanel(hotspot)}
+              aria-label={`${hotspot.label}. ${hotspot.type}. ${hotspot.description}`}
+              style={{ pointerEvents: "auto", position: "absolute", left: `${hotspot.x}%`, top: `${hotspot.y}%`, transform: "translate(-50%, -50%)", minWidth: 44, minHeight: 44, borderRadius: "50%", border: hotspot.id === activeHotspotId ? "1px solid #FFD87A" : "1px solid rgba(123,200,232,0.66)", background: "rgba(8,8,8,0.78)", color: "#7BC8E8", cursor: "pointer", fontSize: 8, letterSpacing: 1, padding: 0 }}
+              title={`${hotspot.label} · ${hotspot.type.toUpperCase()}`}
+            >
+              ●
+            </button>
+          ))}
+        </div>
+      )}
       {(posterLoading || (shouldLoad && !videoReady)) && !mediaFailed && (
-        <div className="state-card mono" style={{ position: "absolute", left: 14, top: 14, zIndex: 5, fontSize: 8, letterSpacing: 2, color: "#7BC8E8" }}>
-          LOADING MEDIA...
+        <div style={{ position: "absolute", left: 14, right: 14, top: 14, zIndex: 5 }}>
+          <LoadingState label="Loading media" message="Preparing this verified chapter clip." />
         </div>
       )}
       {mediaFailed && (
-        <div className="state-card" style={{ position: "absolute", inset: 14, zIndex: 6, display: "flex", flexDirection: "column", justifyContent: "center", gap: 10, background: "rgba(8,8,8,0.86)" }}>
-          <div className="mono state-card-title">MEDIA UNAVAILABLE</div>
-          <div className="state-card-copy">
-            {posterError ? "We couldn't load the poster image for this chapter." : mediaError || "The media failed to load."}
+        <div style={{ position: "absolute", inset: 14, zIndex: 6, display: "grid", alignItems: "center" }}>
+          <ErrorState
+            title="Media unavailable"
+            message={posterError ? "We couldn't load the chapter artwork yet." : (mediaError ? "This chapter clip is taking longer than expected." : "This chapter clip is temporarily unavailable.")}
+            ariaLabel="Video error state"
+            action={<RetryAction label="TRY AGAIN" onRetry={retryMedia} ariaLabel="Retry media loading" />}
+          />
+        </div>
+      )}
+      {openHotspot && (
+        <div style={{ position: "absolute", left: 14, right: 14, bottom: 56, zIndex: 6, border: "1px solid rgba(201,168,76,0.32)", background: "rgba(8,8,8,0.94)", padding: 12 }}>
+          <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#7BC8E8", marginBottom: 6 }}>
+            {openHotspot.type.toUpperCase()} HOTSPOT
+          </div>
+          <div className="bebas" style={{ fontSize: 20, letterSpacing: 2, color: "#F0EBE3", marginBottom: 6 }}>
+            {openHotspot.label}
+          </div>
+          <div style={{ fontSize: 13, color: "rgba(240,235,227,0.72)", lineHeight: 1.55, marginBottom: 10 }}>
+            {openHotspot.description}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="proof-btn mono" type="button" onClick={retryMedia} style={{ fontSize: 8, letterSpacing: 2, padding: "8px 10px", color: "#C9A84C", background: "transparent", border: "1px solid rgba(201,168,76,0.25)", cursor: "pointer" }}>
-              RETRY MEDIA
+            <button type="button" className="proof-btn mono" onClick={resumeFromHotspot} style={{ fontSize: 8, letterSpacing: 2, padding: "8px 10px", color: "#C9A84C", background: "transparent", border: "1px solid rgba(201,168,76,0.32)", cursor: "pointer" }}>
+              RESUME VIDEO
+            </button>
+            <button type="button" className="proof-btn mono" onClick={() => setOpenHotspot(null)} style={{ fontSize: 8, letterSpacing: 2, padding: "8px 10px", color: "#7BC8E8", background: "transparent", border: "1px solid rgba(123,200,232,0.32)", cursor: "pointer" }}>
+              CLOSE
             </button>
           </div>
         </div>
       )}
-      <div className={`video-controls ${hasSources ? "video-controls-visible" : ""}`} aria-label="Video controls">
-        <button className="video-control-btn" type="button" onClick={togglePlay} disabled={!shouldLoad || mediaFailed} aria-label={playing ? `Pause ${moment.title}` : `Play ${moment.title}`}>
-          {playing ? "II" : "▶"}
-        </button>
-        <button className="video-control-btn" type="button" onClick={toggleMute} disabled={!hasSources || mediaFailed} aria-pressed={!muted} aria-label={muted ? `Unmute ${moment.title}` : `Mute ${moment.title}`}>
-          {muted ? "MUTE" : "ON"}
-        </button>
-        <button className="video-control-btn" type="button" onClick={toggleCaptions} disabled={!hasCaptions || mediaFailed} aria-pressed={captionsOn} aria-label={hasCaptions ? `${captionsOn ? "Disable" : "Enable"} captions for ${moment.title}` : `Captions unavailable for ${moment.title}. Add .vtt files to moment.captionVtt.`}>
-          CC
-        </button>
-        <button className="video-control-btn" type="button" onClick={() => seekBy(-5)} disabled={!shouldLoad || mediaFailed} aria-label={`Seek ${moment.title} backward 5 seconds`}>
-          -5
-        </button>
-        <button className="video-control-btn" type="button" onClick={() => seekBy(5)} disabled={!shouldLoad || mediaFailed} aria-label={`Seek ${moment.title} forward 5 seconds`}>
-          +5
-        </button>
+      {isMobileControlMode && controlsVisible && (
+        <div className="video-mobile-center-controls">
+          <button className="video-control-btn video-control-btn-primary" type="button" onClick={togglePlay} disabled={!shouldLoad || mediaFailed} aria-label={playing ? `Pause ${moment.title}` : `Play ${moment.title}`}>
+            {playing ? "II" : "▶"}
+          </button>
+        </div>
+      )}
+      {isMobileControlMode && hasSources && (
+        <>
+          <button type="button" className="video-mobile-tap-zone video-mobile-tap-zone-left" onClick={() => handleTapZone("left")} aria-label={`Double tap left to rewind ${moment.title}`} />
+          <button type="button" className="video-mobile-tap-zone video-mobile-tap-zone-right" onClick={() => handleTapZone("right")} aria-label={`Double tap right to fast-forward ${moment.title}`} />
+          {doubleTapHint && (
+            <div className={`video-doubletap-indicator ${doubleTapHint.startsWith("-") ? "video-doubletap-indicator-left" : "video-doubletap-indicator-right"}`}>
+              {doubleTapHint}
+            </div>
+          )}
+        </>
+      )}
+      <div className={`video-controls ${(hasSources && (!isMobileControlMode || controlsVisible)) ? "video-controls-visible" : ""}`} aria-label="Video controls">
+        <div style={{ position: "absolute", left: 0, right: 0, top: -28, display: "flex", alignItems: "center", gap: 8, padding: "0 4px" }}>
+          <div style={{ position: "relative", flex: 1, height: 4, background: "rgba(255,255,255,0.14)" }}>
+            <div aria-hidden="true" style={{ position: "absolute", inset: 0, width: `${bufferedRatio * 100}%`, background: "rgba(123,200,232,0.32)" }} />
+            <div aria-hidden="true" style={{ position: "absolute", inset: 0, width: `${playedRatio * 100}%`, background: "linear-gradient(90deg,#7BC8E8,#C9A84C,#FFD87A)" }} />
+            {markerPositions.map((chapter) => (
+              <button
+                key={chapter.id}
+                type="button"
+                title={chapter.label}
+                onClick={() => jumpToChapter(chapter)}
+                aria-label={`${chapter.label}. Jump to ${formatTime(chapter.startTime)}. ${chapter.description}`}
+                style={{ position: "absolute", left: `calc(${chapter.ratio * 100}% - 11px)`, top: -10, width: 22, height: 22, borderRadius: "50%", border: chapter.id === activeChapterId ? "1px solid #FFD87A" : "1px solid rgba(123,200,232,0.55)", background: chapter.id === activeChapterId ? "rgba(201,168,76,0.5)" : "rgba(8,8,8,0.84)", cursor: "pointer" }}
+              />
+            ))}
+            <input
+              type="range"
+              min={0}
+              max={hasDuration ? duration : 1}
+              step={0.1}
+              value={hasDuration ? currentTime : 0}
+              onChange={handleScrub}
+              disabled={!hasDuration || mediaFailed}
+              aria-label={`Scrub ${moment.title} playback`}
+              style={{ position: "absolute", inset: 0, width: "100%", opacity: 0, cursor: hasDuration ? "pointer" : "not-allowed" }}
+            />
+          </div>
+          <div className="mono" style={{ fontSize: 8, letterSpacing: 1, color: "#C9A84C", minWidth: 66, textAlign: "right" }}>
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </div>
+        </div>
+        {!isMobileControlMode && (
+          <button className="video-control-btn" type="button" onClick={togglePlay} disabled={!shouldLoad || mediaFailed} aria-label={playing ? `Pause ${moment.title}` : `Play ${moment.title}`}>
+            {playing ? "II" : "▶"}
+          </button>
+        )}
+        {!isMobileControlMode && (
+          <>
+            <button className="video-control-btn" type="button" onClick={toggleMute} disabled={!hasSources || mediaFailed} aria-pressed={!muted} aria-label={muted ? `Unmute ${moment.title}` : `Mute ${moment.title}`}>
+              {muted ? "MUTE" : "ON"}
+            </button>
+            <button className="video-control-btn" type="button" onClick={toggleCaptions} disabled={!hasCaptions || mediaFailed} aria-pressed={captionsOn} aria-label={hasCaptions ? `${captionsOn ? "Disable" : "Enable"} captions for ${moment.title}` : `Captions unavailable for ${moment.title}. Add .vtt files to moment.captionVtt.`}>
+              CC
+            </button>
+            <button className="video-control-btn" type="button" onClick={() => seekBy(-5)} disabled={!shouldLoad || mediaFailed} aria-label={`Seek ${moment.title} backward 5 seconds`}>
+              -5
+            </button>
+            <button className="video-control-btn" type="button" onClick={() => seekBy(5)} disabled={!shouldLoad || mediaFailed} aria-label={`Seek ${moment.title} forward 5 seconds`}>
+              +5
+            </button>
+          </>
+        )}
+        {isMobileControlMode && (
+          <button className="video-control-btn" type="button" onClick={() => setMobileMenuOpen((v) => !v)} aria-expanded={mobileMenuOpen} aria-label={`${mobileMenuOpen ? "Hide" : "Show"} player settings`}>
+            ⋮
+          </button>
+        )}
         <span className="video-control-spacer" />
         <button className="video-control-btn" type="button" onClick={toggleFullscreen} disabled={mediaFailed} aria-pressed={fullscreen} aria-label={fullscreen ? `Exit fullscreen for ${moment.title}` : `Enter fullscreen for ${moment.title}`}>
           F
         </button>
+        {isMobileControlMode && mobileMenuOpen && (
+          <div className="video-mobile-secondary-menu" role="menu" aria-label="Video settings">
+            <button className="video-control-btn" type="button" onClick={toggleMute} disabled={!hasSources || mediaFailed} aria-pressed={!muted} aria-label={muted ? `Unmute ${moment.title}` : `Mute ${moment.title}`}>
+              {muted ? "UNMUTE" : "MUTE"}
+            </button>
+            <button className="video-control-btn" type="button" onClick={toggleCaptions} disabled={!hasCaptions || mediaFailed} aria-pressed={captionsOn} aria-label={hasCaptions ? `${captionsOn ? "Disable" : "Enable"} captions for ${moment.title}` : `Captions unavailable for ${moment.title}. Add .vtt files to moment.captionVtt.`}>
+              CC
+            </button>
+            <button className="video-control-btn" type="button" onClick={() => seekBy(-10)} disabled={!shouldLoad || mediaFailed} aria-label={`Seek ${moment.title} backward 10 seconds`}>
+              -10
+            </button>
+            <button className="video-control-btn" type="button" onClick={() => seekBy(10)} disabled={!shouldLoad || mediaFailed} aria-label={`Seek ${moment.title} forward 10 seconds`}>
+              +10
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function TimelineVideoPreview({ athlete, moment, index, onPlay }) {
+function TimelineVideoPreview({ athlete, moment, index, onPlay, unavailable = false }) {
   const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
   const collectible = collectibleFor(athlete, moment, index);
   const progress = 28 + ((index * 17) % 56);
 
   return (
-    <button className="timeline-video" onClick={onPlay} aria-label={`Open video preview for ${moment.title}`}>
+    <button className="timeline-video" onClick={onPlay} disabled={unavailable} aria-label={unavailable ? `${moment.title} preview unavailable. Coming soon.` : `Open video preview for ${moment.title}`}>
       <SafeStoryVideo athlete={athlete} moment={moment} background />
       <div className="media-text-surface" style={{ position: "relative", zIndex: 1, minHeight: "inherit", padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", textAlign: "left" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
@@ -1354,7 +2032,7 @@ function TimelineVideoPreview({ athlete, moment, index, onPlay }) {
             <span className="bebas" style={{ fontSize: 22, transform: "translateX(1px)" }}>▶</span>
           </span>
           <div style={{ flex: 1 }}>
-            <div className="mono media-muted-copy" style={{ fontSize: 8, letterSpacing: 2, marginBottom: 8 }}>{moment.y} · TAP TO OPEN STORY</div>
+            <div className="mono media-muted-copy" style={{ fontSize: 8, letterSpacing: 2, marginBottom: 8 }}>{moment.y} · TAP TO OPEN CHAPTER</div>
             <div style={{ height: 3, background: "rgba(255,255,255,0.12)" }}>
               <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#7BC8E8,#C9A84C,#FFD87A)" }} />
             </div>
@@ -1367,25 +2045,38 @@ function TimelineVideoPreview({ athlete, moment, index, onPlay }) {
           {collectible && <span className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#FFD87A", border: "1px solid rgba(255,216,122,0.22)", padding: "5px 8px" }}>OWNABLE</span>}
         </div>
       </div>
-      <span className="hotspot" aria-hidden="true" style={{ position: "absolute", right: 18, bottom: 18, zIndex: 3, width: 14, height: 14, borderRadius: "50%", background: "#7BC8E8", border: "1px solid #7BC8E8" }} />
+      <span className="hotspot" aria-hidden="true" style={{ position: "absolute", right: 18, bottom: 18, zIndex: 3, width: 14, height: 14, borderRadius: "50%", background: unavailable ? "#777" : "#7BC8E8", border: `1px solid ${unavailable ? "#777" : "#7BC8E8"}` }} />
     </button>
   );
 }
 
 // ─── INTERACTIVE VIDEO MODULE ─────────────────────────────────────────────────
-function InteractiveStoryVideo({ athlete, moment, compact = false, progress = 0, onPlay, onTwin }) {
+function StoryVideoPlayer({ athlete, moment, compact = false, progress = 0, onContinue, onTwin, initialTime = 0, onTimePersist = null }) {
   const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
   const source = sourceDetailsFor(moment);
   const clampedProgress = Math.max(8, Math.min(progress, 100));
-  const hotspots = [
-    { label: "STORY", x: "18%", y: "22%", color: "#7BC8E8", onClick: onPlay },
-    { label: "STATS", x: "72%", y: "30%", color: "#C9A84C", onClick: onPlay },
-    { label: "TWIN", x: "58%", y: "70%", color: "#FFD87A", onClick: onTwin },
-  ];
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [transcriptQuery, setTranscriptQuery] = useState("");
+  const [hotspotsEnabled, setHotspotsEnabled] = useState(true);
+  const [activeVideoChapter, setActiveVideoChapter] = useState(null);
+  const transcriptData = useMemo(() => transcriptDataFor(athlete, moment), [athlete, moment]);
+  const chapterMarkers = useMemo(() => chapterMarkersFor(moment), [moment]);
+  const hotspotData = useMemo(() => hotspotDataFor(moment), [moment]);
+  const transcriptLines = useMemo(() => (
+    transcriptData.text
+      .split("\n")
+      .map((line) => line.trimEnd())
+      .filter((line) => line.length > 0)
+  ), [transcriptData.text]);
+  const filteredTranscriptLines = useMemo(() => {
+    const query = transcriptQuery.trim().toLowerCase();
+    if (!query) return transcriptLines;
+    return transcriptLines.filter((line) => line.toLowerCase().includes(query));
+  }, [transcriptLines, transcriptQuery]);
 
   return (
     <section className="interactive-video" aria-label={`Interactive video for ${moment.title}`} style={{ minHeight: compact ? 300 : 430 }}>
-      <SafeStoryVideo athlete={athlete} moment={moment} eager={!compact} autoPlay={false} loop={false} background />
+      <SafeStoryVideo athlete={athlete} moment={moment} eager={!compact} autoPlay={false} loop={false} chapterMarkers={chapterMarkers} onActiveChapterChange={setActiveVideoChapter} hotspots={hotspotData} hotspotsEnabled={hotspotsEnabled} initialTime={initialTime} onTimePersist={onTimePersist} />
       <div className="media-text-surface" style={{ position: "relative", zIndex: 1, minHeight: compact ? 300 : 430, padding: compact ? 22 : 26, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 18, alignItems: "start" }}>
           <div>
@@ -1401,16 +2092,20 @@ function InteractiveStoryVideo({ athlete, moment, compact = false, progress = 0,
           </div>
         </div>
 
-        <button onClick={onPlay} aria-label={`Play interactive story for ${moment.title}`} style={{ alignSelf: "center", width: compact ? 86 : 104, height: compact ? 86 : 104, borderRadius: "50%", border: "1px solid rgba(201,168,76,0.48)", background: "rgba(8,8,8,0.58)", color: "#C9A84C", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 38px rgba(201,168,76,0.18)" }}>
-          <span className="bebas" style={{ fontSize: compact ? 34 : 42, letterSpacing: 2, transform: "translateX(2px)" }}>▶</span>
-        </button>
-
-        {hotspots.map((h, i) => (
-          <button key={h.label} onClick={h.onClick} className="hotspot mono" style={{ position: "absolute", left: h.x, top: h.y, transform: "translate(-50%,-50%)", width: 44, height: 44, borderRadius: "50%", border: "none", background: "transparent", cursor: "pointer" }} aria-label={`${h.label} hotspot`}>
-            <span aria-hidden="true" style={{ position: "absolute", left: 16, top: 16, width: 12, height: 12, borderRadius: "50%", border: `1px solid ${h.color}`, background: h.color }} />
-            <span style={{ position: "absolute", left: 16, top: -4, color: h.color, fontSize: 8, letterSpacing: 2, whiteSpace: "nowrap", animationDelay: `${i * 0.2}s` }}>{h.label}</span>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+          <button onClick={onContinue} className="story-card-btn mono" aria-label={`Continue ${moment.title} story scene`} style={{ fontSize: 9, color: "#C9A84C", letterSpacing: 2, background: "rgba(8,8,8,0.56)", border: "1px solid rgba(201,168,76,0.34)", padding: "9px 12px", cursor: "pointer", borderRadius: 2 }}>
+            CONTINUE STORY
           </button>
-        ))}
+          <button onClick={onTwin} className="story-card-btn mono" aria-label={`Ask companion about ${moment.title}`} style={{ fontSize: 9, color: "#7BC8E8", letterSpacing: 2, background: "rgba(8,8,8,0.56)", border: "1px solid rgba(123,200,232,0.36)", padding: "9px 12px", cursor: "pointer", borderRadius: 2 }}>
+            ASK COMPANION
+          </button>
+          <button onClick={() => setTranscriptOpen((v) => !v)} className="story-card-btn mono" aria-expanded={transcriptOpen} aria-controls={`transcript-${athlete.id}-${moment.y}`} aria-label={`${transcriptOpen ? "Hide" : "View"} transcript for ${moment.title}`} style={{ fontSize: 9, color: "#F0EBE3", letterSpacing: 2, background: "rgba(8,8,8,0.56)", border: "1px solid rgba(255,255,255,0.24)", padding: "9px 12px", cursor: "pointer", borderRadius: 2 }}>
+            {transcriptOpen ? "HIDE TRANSCRIPT" : "VIEW TRANSCRIPT"}
+          </button>
+          <button onClick={() => setHotspotsEnabled((value) => !value)} className="story-card-btn mono" aria-pressed={hotspotsEnabled} aria-label={`${hotspotsEnabled ? "Hide" : "Show"} interactive hotspots`} style={{ fontSize: 9, color: hotspotsEnabled ? "#C9A84C" : "#777", letterSpacing: 2, background: "rgba(8,8,8,0.56)", border: "1px solid rgba(201,168,76,0.24)", padding: "9px 12px", cursor: "pointer", borderRadius: 2 }}>
+            {hotspotsEnabled ? "HIDE HOTSPOTS" : "SHOW HOTSPOTS"}
+          </button>
+        </div>
 
         <div>
           <div style={{ display: "flex", gap: 7, marginBottom: 13, alignItems: "center" }}>
@@ -1423,34 +2118,110 @@ function InteractiveStoryVideo({ athlete, moment, compact = false, progress = 0,
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
             <div className="mono media-muted-copy" style={{ fontSize: 8, letterSpacing: 1 }}>{moment.y} · {source.level}</div>
-            <div className="mono media-muted-copy" style={{ fontSize: 8, letterSpacing: 1 }}>CAPTIONS · HOTSPOTS · STORY</div>
+            <div className="mono media-muted-copy" style={{ fontSize: 8, letterSpacing: 1 }}>NATIVE VIDEO · CAPTIONS · CONTROLS</div>
           </div>
+          {activeVideoChapter && (
+            <div className="mono" style={{ marginTop: 8, fontSize: 8, letterSpacing: 1.2, color: "#C9A84C" }}>
+              ACTIVE CHAPTER · {activeVideoChapter.label}
+            </div>
+          )}
         </div>
+        {transcriptOpen && (
+          <div id={`transcript-${athlete.id}-${moment.y}`} style={{ marginTop: 14, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(8,8,8,0.82)", padding: 14, maxHeight: compact ? 210 : 260, overflow: "auto" }}>
+            <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#7BC8E8", marginBottom: 10 }}>
+              TRANSCRIPT {transcriptData.isPlaceholder ? "· IN PREPARATION" : "· SEARCHABLE"}
+            </div>
+            {transcriptData.chapters.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                {transcriptData.chapters.map((chapter) => (
+                  <span key={`${chapter.time}-${chapter.label}`} className="mono" style={{ fontSize: 8, letterSpacing: 1, color: "#C9A84C", border: "1px solid rgba(201,168,76,0.24)", padding: "4px 6px" }}>
+                    {chapter.time} · {chapter.label}
+                  </span>
+                ))}
+              </div>
+            )}
+            <label className="mono" style={{ display: "block", fontSize: 8, letterSpacing: 1.5, color: "#555", marginBottom: 6 }}>
+              SEARCH TRANSCRIPT
+            </label>
+            <input
+              type="search"
+              value={transcriptQuery}
+              onChange={(event) => setTranscriptQuery(event.target.value)}
+              placeholder="Search lines..."
+              style={{ width: "100%", background: "#0f0f0f", border: "1px solid rgba(255,255,255,0.1)", color: "#F0EBE3", padding: "8px 10px", marginBottom: 10, fontSize: 13 }}
+            />
+            {filteredTranscriptLines.length === 0 ? (
+              <div className="mono" style={{ fontSize: 8, letterSpacing: 1.5, color: "#777" }}>No transcript lines match your search.</div>
+            ) : (
+              <div style={{ userSelect: "text", whiteSpace: "pre-wrap", color: "rgba(240,235,227,0.86)", fontSize: 14, lineHeight: 1.55 }}>
+                {filteredTranscriptLines.join("\n")}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </section>
   );
 }
 
 // ─── STORY VIEW ───────────────────────────────────────────────────────────────
-function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin }) {
-  const [step, setStep] = useState(0);
-  const [sceneLoading, setSceneLoading] = useState(true);
+function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin, onPersistProgress, onRestartProgress, initialVideoTime = 0, twinOpen = false }) {
   const panels = storyPanelsFor(athlete, moment);
+  const initialScene = Math.min(Math.max((sceneNumberFromHash() || 1) - 1, 0), Math.max(panels.length - 1, 0));
+  const [step, setStep] = useState(initialScene);
+  const [sceneLoading, setSceneLoading] = useState(true);
   const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
   const collectible = collectibleFor(athlete, moment, momentIndex);
   const progress = Math.round(((step + 1) / panels.length) * 100);
   const complete = step === panels.length - 1;
   const activePanel = panels[step];
   const missingChapterContent = !moment?.title || !moment?.body || !activePanel?.b || !panels.length;
+  const chapterNumber = momentIndex + 1;
+  const [videoTime, setVideoTime] = useState(Math.max(0, Number(initialVideoTime) || 0));
 
-  const next = () => setStep(s => Math.min(s + 1, panels.length - 1));
-  const prev = () => setStep(s => Math.max(s - 1, 0));
+  const next = () => setStep((s) => Math.min(s + 1, panels.length - 1));
+  const prev = () => setStep((s) => Math.max(s - 1, 0));
+  const jumpToScene = (index) => setStep(Math.min(Math.max(index, 0), panels.length - 1));
 
+  useEffect(() => {
+    const nextScene = Math.min(Math.max((sceneNumberFromHash() || 1) - 1, 0), Math.max(panels.length - 1, 0));
+    setStep(nextScene);
+    setVideoTime(Math.max(0, Number(initialVideoTime) || 0));
+  }, [initialVideoTime, moment?.title, panels.length]);
   useEffect(() => {
     setSceneLoading(true);
     const id = window.setTimeout(() => setSceneLoading(false), 280);
     return () => window.clearTimeout(id);
-  }, [moment?.title]);
+  }, [moment?.title, step]);
+  useEffect(() => {
+    if (!panels.length) return;
+    const nextHash = chapterSceneHash(chapterNumber, step + 1);
+    if (window.location.hash !== nextHash) window.history.pushState(null, "", nextHash);
+  }, [chapterNumber, panels.length, step]);
+  useEffect(() => {
+    if (typeof onPersistProgress !== "function") return;
+    if (step === 0 && videoTime === 0) return;
+    onPersistProgress({
+      athleteId: athlete.id,
+      chapterNumber,
+      sceneNumber: step + 1,
+      videoTime
+    });
+  }, [athlete.id, chapterNumber, onPersistProgress, step, videoTime]);
+  useEffect(() => {
+    const syncSceneFromRoute = () => {
+      const hashChapter = chapterNumberFromHash(window.location.hash);
+      if (hashChapter !== chapterNumber) return;
+      const hashScene = Math.min(Math.max((sceneNumberFromHash(window.location.hash) || 1) - 1, 0), Math.max(panels.length - 1, 0));
+      setStep(hashScene);
+    };
+    window.addEventListener("popstate", syncSceneFromRoute);
+    window.addEventListener("hashchange", syncSceneFromRoute);
+    return () => {
+      window.removeEventListener("popstate", syncSceneFromRoute);
+      window.removeEventListener("hashchange", syncSceneFromRoute);
+    };
+  }, [chapterNumber, panels.length]);
 
   return (
     <div className="story-shell" style={{ animation: "fadeIn 0.35s ease" }}>
@@ -1460,80 +2231,118 @@ function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin }) {
       </div>
 
       <nav className="ricon-nav" style={{ position: "relative", zIndex: 2, padding: "calc(22px + var(--safe-top)) calc(40px + var(--safe-right)) 22px calc(40px + var(--safe-left))", display: "flex", alignItems: "center", gap: 14, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-        <button className="mono back-btn" onClick={onBack} style={{ fontSize: 9, letterSpacing: 2, color: "#777", background: "none", border: "none", cursor: "pointer" }}>← TIMELINE</button>
+        <button className="mono back-btn" onClick={onBack} style={{ fontSize: 9, letterSpacing: 2, color: "#777", background: "none", border: "none", cursor: "pointer" }}>← BACK TO TIMELINE</button>
         <div style={{ width: 1, height: 16, background: "#252525" }} />
         <span className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8" }}>{athlete.name}</span>
         <div style={{ flex: 1 }} />
         <button className="hide-mobile mono" onClick={onHome} style={{ fontSize: 9, letterSpacing: 2, color: "#555", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", padding: "8px 12px", cursor: "pointer" }}>ROSTER</button>
       </nav>
 
-      <div className="story-pad story-layout" style={{ position: "relative", zIndex: 1, padding: "56px 40px 40px", display: "flex", gap: 28, alignItems: "stretch" }}>
-        <div style={{ flex: "1 1 58%", minHeight: 520, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-          <div>
+      <div className={`story-pad story-layout ${twinOpen ? "" : "story-has-bottom-bar"}`} style={{ position: "relative", zIndex: 1, padding: "56px 40px 40px", display: "flex", gap: 28, alignItems: "stretch" }}>
+        <div className="story-main-column" style={{ flex: "1 1 58%", minHeight: 520, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          <ErrorBoundary scopeLabel="story scene" resetKeys={[athlete.id, moment?.title, step]}>
+          <div className="story-copy-block">
             <div className="mono" style={{ display: "inline-flex", gap: 8, alignItems: "center", border: `1px solid ${cfg.color}55`, color: cfg.color, padding: "6px 10px", fontSize: 9, letterSpacing: 2, marginBottom: 24 }}>
               {cfg.icon} {cfg.label} · {moment.y} · {sourceDetailsFor(moment).level}
             </div>
             {missingChapterContent ? (
-              <div className="state-card" style={{ maxWidth: 820 }}>
-                <div className="mono state-card-title">CHAPTER CONTENT MISSING</div>
-                <div className="state-card-copy">This chapter is still being prepared. You can return to the timeline or ask the companion to continue with verified context.</div>
-                <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-                  <button onClick={onBack} className="story-card-btn mono" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 14px", background: "rgba(255,255,255,0.03)", color: "#C9A84C", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer" }}>RETURN TO TIMELINE</button>
-                  <button onClick={() => onTwin("qa")} className="cta-glow mono" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 16px", background: "#C9A84C", color: "#080808", border: "none", cursor: "pointer" }}>ASK THE COMPANION</button>
-                </div>
+              <div style={{ maxWidth: 820 }}>
+                <ErrorState
+                  title="Chapter in editorial review"
+                  message="This part of the archive is still being prepared. You can return to the timeline or continue in companion mode."
+                  ariaLabel="Story content unavailable"
+                  action={(
+                    <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+                      <RetryAction label="RETURN TO TIMELINE" onRetry={onBack} ariaLabel="Return to timeline" />
+                      <RetryAction label="ASK THE COMPANION" onRetry={() => onTwin("qa")} ariaLabel="Open companion mode" />
+                    </div>
+                  )}
+                />
               </div>
             ) : sceneLoading ? (
               <div style={{ maxWidth: 860 }}>
-                <div className="skeleton-shimmer" style={{ height: 72, width: "min(760px, 100%)", marginBottom: 20 }} />
-                <div className="skeleton-shimmer" style={{ height: 18, width: "100%", marginBottom: 10 }} />
-                <div className="skeleton-shimmer" style={{ height: 18, width: "95%", marginBottom: 10 }} />
-                <div className="skeleton-shimmer" style={{ height: 18, width: "82%" }} />
+                <LoadingState label="Loading chapter" message="Pulling this verified scene from the RICON archive." />
               </div>
             ) : (
               <>
-                <h1 className="bebas" style={{ fontSize: "clamp(54px,9vw,116px)", letterSpacing: 7, lineHeight: 0.88, color: "#F0EBE3", maxWidth: 900, marginBottom: 24 }}>
+                <h1 className="bebas story-title-mobile-fit" style={{ fontSize: "clamp(54px,9vw,116px)", letterSpacing: 7, lineHeight: 0.88, color: "#F0EBE3", maxWidth: 900, marginBottom: 24 }}>
                   {moment.title}
                 </h1>
-                <div className="cormorant" style={{ fontStyle: "italic", fontSize: "clamp(22px,3vw,34px)", lineHeight: 1.45, color: "rgba(240,235,227,0.72)", maxWidth: 820 }}>
+                <div className="cormorant story-context-mobile-fit" style={{ fontSize: "clamp(22px,3vw,34px)", lineHeight: 1.45, color: "rgba(240,235,227,0.72)", maxWidth: 820 }}>
                   {activePanel.b}
                 </div>
               </>
             )}
           </div>
 
-          <div style={{ marginTop: 42 }}>
+          <div className="story-scene-controls" style={{ marginTop: 42 }}>
             <div style={{ height: 3, background: "rgba(255,255,255,0.08)", marginBottom: 18 }}>
               <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#7BC8E8,#C9A84C,#FFD87A)", transition: "width 0.35s ease" }} />
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
               <div className="mono" style={{ fontSize: 9, color: "#555", letterSpacing: 2 }}>
-                {missingChapterContent ? "CHAPTER STATUS · PENDING CONTENT" : `SCENE ${step + 1}/${panels.length} · ${activePanel.k}`}
+                {missingChapterContent ? "CHAPTER STATUS · IN PREPARATION" : `SCENE ${step + 1}/${panels.length} · ${activePanel.k} · ${activePanel.t}`}
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <button onClick={prev} disabled={step === 0 || missingChapterContent} className="story-card-btn mono" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 14px", background: "rgba(255,255,255,0.03)", color: step === 0 || missingChapterContent ? "#333" : "#C9A84C", border: "1px solid rgba(255,255,255,0.08)", cursor: step === 0 || missingChapterContent ? "not-allowed" : "pointer" }}>BACK</button>
+                <button onClick={prev} disabled={step === 0 || missingChapterContent} className="story-card-btn mono" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 14px", background: "rgba(255,255,255,0.03)", color: step === 0 || missingChapterContent ? "#333" : "#C9A84C", border: "1px solid rgba(255,255,255,0.08)", cursor: step === 0 || missingChapterContent ? "not-allowed" : "pointer" }}>PREVIOUS SCENE</button>
                 <button onClick={() => {
                   triggerHaptic("primary");
                   if (missingChapterContent) onTwin("qa");
                   else if (complete) onTwin("qa");
                   else next();
                 }} className="cta-glow mono" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 16px", background: "#C9A84C", color: "#080808", border: "none", cursor: "pointer" }}>
-                  {missingChapterContent || complete ? "ASK THE TWIN" : "CONTINUE"}
+                  {missingChapterContent || complete ? "ASK TWIN" : "NEXT SCENE"}
+                </button>
+                <button onClick={() => {
+                  setStep(0);
+                  setVideoTime(0);
+                  if (typeof onRestartProgress === "function") onRestartProgress({ athleteId: athlete.id, chapterNumber });
+                  window.history.pushState(null, "", chapterSceneHash(chapterNumber, 1));
+                }} className="story-card-btn mono" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 14px", background: "rgba(255,255,255,0.02)", color: "#777", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer" }}>
+                  RESTART CHAPTER
+                </button>
+                <button onClick={() => onTwin("qa")} className="story-card-btn mono story-ai-entry" style={{ fontSize: 9, letterSpacing: 2, padding: "10px 14px", background: "rgba(123,200,232,0.07)", color: "#7BC8E8", border: "1px solid rgba(123,200,232,0.32)", cursor: "pointer" }}>
+                  ASK TWIN
                 </button>
               </div>
             </div>
+            {!missingChapterContent && (
+              <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <div className="mono" style={{ fontSize: 8, color: "#7BC8E8", letterSpacing: 2 }}>SCENE STEPPER</div>
+                {panels.map((panel, index) => (
+                  <button
+                    key={`${panel.k}-${index}`}
+                    type="button"
+                    onClick={() => jumpToScene(index)}
+                    aria-current={step === index ? "step" : undefined}
+                    className="story-card-btn mono"
+                    style={{ fontSize: 8, letterSpacing: 1.4, padding: "8px 10px", background: step === index ? "rgba(201,168,76,0.16)" : "rgba(255,255,255,0.02)", color: step === index ? "#FFD87A" : "#C9A84C", border: step === index ? "1px solid rgba(201,168,76,0.52)" : "1px solid rgba(201,168,76,0.22)", cursor: "pointer" }}
+                    aria-label={`Jump to scene ${index + 1}: ${panel.k}. ${panel.t}`}
+                    title={`${panel.k} · ${panel.t}`}
+                  >
+                    {index + 1}. {panel.k}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+          </ErrorBoundary>
         </div>
 
-        <aside className="story-panel" style={{ flex: "0 1 430px", padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 18 }}>
-          <InteractiveStoryVideo
+        <aside className="story-panel story-video-column" style={{ flex: "0 1 430px", padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 18 }}>
+          <ErrorBoundary scopeLabel="story detail actions" resetKeys={[athlete.id, moment?.title]}>
+          <div className="story-video-block">
+          <StoryDetailActions
             athlete={athlete}
             moment={moment}
             progress={progress}
-            onPlay={complete ? () => onTwin("qa") : next}
+            onContinue={complete ? () => onTwin("qa") : next}
             onTwin={() => onTwin("qa")}
           />
+          </div>
+          </ErrorBoundary>
 
-          <div>
+          <div className="story-supporting-card">
             {collectible && complete && (
               <div style={{ padding: 18, border: "1px solid rgba(201,168,76,0.32)", background: "linear-gradient(135deg,rgba(201,168,76,0.12),rgba(255,255,255,0.03))", animation: "fadeUp 0.4s ease" }}>
                 <div className="mono" style={{ fontSize: 9, color: "#C9A84C", letterSpacing: 2, marginBottom: 10 }}>OWN THIS MOMENT</div>
@@ -1546,6 +2355,22 @@ function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin }) {
           </div>
         </aside>
       </div>
+      {!twinOpen && (
+        <div className="story-bottom-action-bar" role="toolbar" aria-label="Story quick actions">
+          <button type="button" onClick={prev} disabled={step === 0 || missingChapterContent} aria-label="Go to previous scene">
+            PREVIOUS
+          </button>
+          <button type="button" onClick={() => (missingChapterContent || complete ? onTwin("qa") : next())} aria-label={missingChapterContent || complete ? "Ask the Twin" : "Go to next scene"}>
+            {missingChapterContent || complete ? "ASK TWIN" : "NEXT"}
+          </button>
+          <button type="button" onClick={() => onTwin("qa")} aria-label="Open Ask Twin companion">
+            ASK TWIN
+          </button>
+          <button type="button" onClick={onBack} aria-label="Return to timeline">
+            TIMELINE
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1802,13 +2627,13 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
           {["narrator","qa"].map(m => (
             <button key={m} onClick={() => switchMode(m)}
               className={mode === m ? "mode-btn-active" : ""}
-              style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "8px 16px", border: "none", borderRadius: 2, cursor: "pointer", background: mode === m ? "#C9A84C" : "transparent", color: mode === m ? "#080808" : "#555", transition: "all 0.2s" }}>
+              style={{ fontFamily: '"Inter"', fontSize: 9, letterSpacing: 2, padding: "8px 16px", border: "none", borderRadius: 2, cursor: "pointer", background: mode === m ? "#C9A84C" : "transparent", color: mode === m ? "#080808" : "#555", transition: "all 0.2s" }}>
               {m === "narrator" ? "▶ NARRATOR" : "✦ Q&A"}
             </button>
           ))}
         </div>
         <button className="twin-close" onClick={onClose}
-          style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, color: "#444", background: "none", border: "1px solid #1e1e1e", padding: "8px 14px", cursor: "pointer", borderRadius: 2, transition: "color 0.2s" }}
+          style={{ fontFamily: '"Inter"', fontSize: 9, letterSpacing: 2, color: "#444", background: "none", border: "1px solid #1e1e1e", padding: "8px 14px", cursor: "pointer", borderRadius: 2, transition: "color 0.2s" }}
           onMouseEnter={e => e.target.style.color="#888"} onMouseLeave={e => e.target.style.color="#444"}>
           CLOSE ✕
         </button>
@@ -1850,7 +2675,7 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
           <div className="twin-chat" style={{ flex: 1, overflowY: "auto", padding: "36px 40px" }}>
             {messages.length === 0 && !loading && !error && (
               <div className="twin-empty" style={{ textAlign: "center", paddingTop: 80 }}>
-                <div className="cormorant" style={{ fontStyle: "italic", fontSize: 22, color: "rgba(240,235,227,0.18)", marginBottom: 12 }}>
+                <div className="cormorant" style={{ fontSize: 22, color: "rgba(240,235,227,0.18)", marginBottom: 12 }}>
                   {mode === "narrator" ? persona.emptyState.narratorHeadline : persona.emptyState.qaHeadline}
                 </div>
                 <div className="mono" style={{ maxWidth: 640, margin: "0 auto 12px", fontSize: 9, letterSpacing: 1, lineHeight: 1.9, color: "#3a3a3a" }}>
@@ -1960,7 +2785,7 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
               </div>
               <div className="twin-input-row" style={{ display: "flex", gap: 10 }}>
                 <button onClick={isListening ? () => recognitionRef.current?.stop?.() : startVoiceInput} disabled={loading} aria-label={isListening ? `Stop voice input for ${athlete.name}` : `Ask ${athlete.name} by voice`}
-                  style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 16px", background: isListening ? "rgba(123,200,232,0.16)" : "transparent", color: isListening ? "#7BC8E8" : "#C9A84C", border: "1px solid rgba(201,168,76,0.28)", borderRadius: 2, cursor: loading ? "not-allowed" : "pointer", transition: "all 0.2s" }}>
+                  style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "13px 16px", background: isListening ? "rgba(123,200,232,0.16)" : "transparent", color: isListening ? "#7BC8E8" : "#C9A84C", border: "1px solid rgba(201,168,76,0.28)", borderRadius: 2, cursor: loading ? "not-allowed" : "pointer", transition: "all 0.2s" }}>
                   {isListening ? "STOP MIC" : "ASK BY VOICE"}
                 </button>
                 <label className="sr-only" htmlFor="twin-composer">Ask the Digital Twin a question</label>
@@ -1981,20 +2806,20 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
                   }
                 }}
                 placeholder={`Ask ${athlete.name.split(" ")[0]} anything...`}
-                style={{ flex: 1, minHeight: 48, maxHeight: 130, resize: "vertical", background: "#0f0f0f", border: "1px solid rgba(255,255,255,0.07)", color: "#F0EBE3", padding: "13px 18px", fontFamily: '"DM Sans"', fontSize: 14, borderRadius: 2, transition: "border-color 0.2s", lineHeight: 1.45 }} />
+                style={{ flex: 1, minHeight: 48, maxHeight: 130, resize: "vertical", background: "#0f0f0f", border: "1px solid rgba(255,255,255,0.07)", color: "#F0EBE3", padding: "13px 18px", fontFamily: '"Inter"', fontSize: 14, borderRadius: 2, transition: "border-color 0.2s", lineHeight: 1.45 }} />
                 <span id="twin-composer-help" className="sr-only">Press Enter to send. Press Shift and Enter to add a new line.</span>
                 <button onClick={() => sendQA()} disabled={loading || !input.trim()} aria-label={`Send message to ${athlete.name}`}
-                style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 22px", background: loading || !input.trim() ? "#161616" : "#C9A84C", color: loading || !input.trim() ? "#3a3a3a" : "#080808", border: "none", borderRadius: 2, cursor: loading || !input.trim() ? "not-allowed" : "pointer", transition: "all 0.2s" }}>
+                style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "13px 22px", background: loading || !input.trim() ? "#161616" : "#C9A84C", color: loading || !input.trim() ? "#3a3a3a" : "#080808", border: "none", borderRadius: 2, cursor: loading || !input.trim() ? "not-allowed" : "pointer", transition: "all 0.2s" }}>
                   SEND →
                 </button>
                 {loading && (
                   <button onClick={stopGeneration} aria-label={`Stop ${athlete.name} response generation`}
-                  style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 18px", background: "rgba(255,70,70,0.08)", color: "rgba(255,150,150,0.92)", border: "1px solid rgba(255,70,70,0.28)", borderRadius: 2, cursor: "pointer", transition: "all 0.2s" }}>
+                  style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "13px 18px", background: "rgba(255,70,70,0.08)", color: "rgba(255,150,150,0.92)", border: "1px solid rgba(255,70,70,0.28)", borderRadius: 2, cursor: "pointer", transition: "all 0.2s" }}>
                     STOP
                   </button>
                 )}
                 <button onClick={onClose} disabled={loading} aria-label="Close AI companion"
-                style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 18px", background: "transparent", color: "#777", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 2, cursor: loading ? "not-allowed" : "pointer", transition: "all 0.2s" }}>
+                style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "13px 18px", background: "transparent", color: "#777", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 2, cursor: loading ? "not-allowed" : "pointer", transition: "all 0.2s" }}>
                   CLOSE
                 </button>
               </div>
@@ -2018,23 +2843,23 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
                 </div>}
                 {loading ? (
                   <button className="twin-btn" onClick={stopGeneration} aria-label={`Stop ${athlete.name} response generation`}
-                    style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "rgba(255,70,70,0.08)", color: "rgba(255,150,150,0.92)", border: "1px solid rgba(255,70,70,0.28)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
+                    style={{ fontFamily: '"Inter"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "rgba(255,70,70,0.08)", color: "rgba(255,150,150,0.92)", border: "1px solid rgba(255,70,70,0.28)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
                     STOP GENERATION
                   </button>
                 ) : <button className="twin-btn" onClick={continueNarrator} aria-label={`Continue ${athlete.name} narrator story`}
-                  style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#7BC8E8", border: "1px solid rgba(123,200,232,0.3)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
+                  style={{ fontFamily: '"Inter"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#7BC8E8", border: "1px solid rgba(123,200,232,0.3)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
                   ▶ CONTINUE THE STORY
                 </button>}
                 {!loading && <button className="twin-btn" onClick={retryLatest} aria-label={`Retry latest ${athlete.name} narrator response`}
-                  style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.3)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
+                  style={{ fontFamily: '"Inter"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.3)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
                   RETRY RESPONSE
                 </button>}
                 <button className="twin-btn" onClick={() => switchMode("qa")} disabled={loading} aria-label={`Switch to ${athlete.name} question and answer mode`}
-                  style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.3)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
+                  style={{ fontFamily: '"Inter"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.3)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
                   ✦ SWITCH TO Q&A
                 </button>
                 <button className="twin-btn" onClick={onClose} disabled={loading} aria-label="Close AI companion"
-                  style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#777", border: "1px solid rgba(255,255,255,0.14)", cursor: loading ? "not-allowed" : "pointer", borderRadius: 2, transition: "all 0.25s" }}>
+                  style={{ fontFamily: '"Inter"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#777", border: "1px solid rgba(255,255,255,0.14)", cursor: loading ? "not-allowed" : "pointer", borderRadius: 2, transition: "all 0.25s" }}>
                   CLOSE
                 </button>
               </div>
