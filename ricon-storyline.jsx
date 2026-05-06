@@ -18,8 +18,9 @@ const CSS = `
   @keyframes videoPulse { 0%,100%{opacity:0.45;transform:scaleX(0.82);} 50%{opacity:1;transform:scaleX(1);} }
   @keyframes hotspotPulse { 0%,100%{box-shadow:0 0 0 0 rgba(123,200,232,0.2);} 50%{box-shadow:0 0 0 9px rgba(123,200,232,0);} }
   @keyframes voiceBar { 0%,100%{height:8px;opacity:0.35;} 50%{height:28px;opacity:1;} }
-  .ricon-root { background:#080808; min-height:100vh; color:#F0EBE3; font-family:"DM Sans",sans-serif; overflow-x:hidden; }
+  .ricon-root { background:#080808; min-height:100dvh; color:#F0EBE3; font-family:"DM Sans",sans-serif; overflow-x:hidden; }
   button { font: inherit; }
+  button:focus-visible, a:focus-visible, input:focus-visible { outline:2px solid #7BC8E8; outline-offset:3px; }
   .bebas { font-family:"Bebas Neue",sans-serif; }
   .cormorant { font-family:"Cormorant Garamond",serif; }
   .mono { font-family:"Space Mono",monospace; }
@@ -42,7 +43,7 @@ const CSS = `
   .mode-btn-active { background:#C9A84C !important; color:#080808 !important; }
   .scanline-fx { pointer-events:none; position:absolute; left:0; right:0; height:80px; background:linear-gradient(transparent,rgba(201,168,76,0.03),transparent); animation:scanline 6s linear infinite; }
   .hero-field { animation:slowDrift 13s ease-in-out infinite; }
-  .story-shell { min-height:100vh; position:relative; overflow:hidden; background:radial-gradient(circle at 72% 18%,rgba(201,168,76,0.16),transparent 34%),radial-gradient(circle at 18% 70%,rgba(123,200,232,0.1),transparent 30%),#070707; }
+  .story-shell { min-height:100dvh; position:relative; overflow:hidden; background:radial-gradient(circle at 72% 18%,rgba(201,168,76,0.16),transparent 34%),radial-gradient(circle at 18% 70%,rgba(123,200,232,0.1),transparent 30%),#070707; }
   .story-panel { background:rgba(12,12,12,0.72); border:1px solid rgba(255,255,255,0.08); backdrop-filter:blur(28px); }
   .interactive-video { position:relative; overflow:hidden; min-height:320px; background:#090909; border:1px solid rgba(255,255,255,0.08); }
   .interactive-video:before { content:""; position:absolute; inset:-20%; background:radial-gradient(circle at 35% 28%,rgba(123,200,232,0.18),transparent 26%),radial-gradient(circle at 68% 62%,rgba(201,168,76,0.22),transparent 30%),linear-gradient(135deg,rgba(255,255,255,0.06),transparent 44%); animation:slowDrift 11s ease-in-out infinite; }
@@ -62,24 +63,27 @@ const CSS = `
   .voice-bars span:nth-child(5) { animation-delay:0.4s; background:#FFD87A; }
   .proof-btn:hover, .story-card-btn:hover { border-color:rgba(201,168,76,0.65) !important; color:#FFD87A !important; background:rgba(201,168,76,0.08) !important; }
   .compact-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:2px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *:before, *:after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+  }
   @media (max-width: 760px) {
     .hide-mobile { display:none !important; }
     .ricon-nav { padding:18px 18px !important; }
     .home-hero, .athlete-hero, .story-pad { padding-left:20px !important; padding-right:20px !important; }
-    .home-hero { grid-template-columns:1fr !important; padding-top:36px !important; }
+    .home-hero { grid-template-columns:1fr !important; padding-top:32px !important; min-height:auto !important; }
     .story-layout, .twin-layout { flex-direction:column !important; }
     .twin-sidebar { display:none !important; }
     .timeline-wrap { padding:44px 20px 64px !important; }
     .timeline-heading { margin-bottom:34px !important; line-height:1.7 !important; }
     .timeline-line, .timeline-dot { display:none !important; }
-    .timeline-row { display:block !important; margin-bottom:44px !important; padding:22px 0 34px !important; border-bottom:1px solid rgba(255,255,255,0.06) !important; }
+    .timeline-row { display:block !important; margin-bottom:28px !important; padding:18px 0 28px !important; border-bottom:1px solid rgba(255,255,255,0.06) !important; }
     .timeline-year { width:auto !important; display:flex !important; gap:10px !important; align-items:center !important; margin-bottom:16px !important; }
     .timeline-year .mono:first-child { font-size:14px !important; }
     .timeline-year .mono:last-child { margin-top:0 !important; font-size:8px !important; }
     .timeline-content { padding-left:0 !important; padding-bottom:0 !important; border-bottom:none !important; }
-    .timeline-title { font-size:34px !important; line-height:1.05 !important; max-width:100% !important; }
-    .timeline-body { font-size:20px !important; line-height:1.65 !important; max-width:100% !important; }
-    .timeline-video { width:100% !important; min-height:260px !important; margin:20px 0 18px !important; }
+    .timeline-title { font-size:28px !important; line-height:1.08 !important; max-width:100% !important; letter-spacing:2px !important; }
+    .timeline-body { font-size:16px !important; line-height:1.55 !important; max-width:100% !important; }
+    .timeline-video { width:100% !important; min-height:184px !important; margin:18px 0 16px !important; }
     .twin-modal { overflow-y:auto !important; backdrop-filter:none !important; }
     .twin-header { padding:18px 18px !important; align-items:flex-start !important; gap:14px !important; flex-wrap:wrap !important; }
     .twin-title { width:100% !important; }
@@ -91,7 +95,7 @@ const CSS = `
     .twin-empty { padding-top:28px !important; }
     .twin-prompt-row { flex-direction:column !important; align-items:stretch !important; }
     .twin-prompt-row button { width:100% !important; padding:13px 14px !important; line-height:1.5 !important; }
-    .twin-input-bar { padding:16px 18px 20px !important; position:sticky !important; bottom:0 !important; background:rgba(4,4,4,0.96) !important; }
+    .twin-input-bar { padding:16px 18px max(20px, env(safe-area-inset-bottom)) !important; position:sticky !important; bottom:0 !important; background:rgba(4,4,4,0.96) !important; }
     .twin-input-row { flex-direction:column !important; }
     .twin-input-row input, .twin-input-row button { width:100% !important; min-height:54px !important; }
     .twin-message-user { max-width:86% !important; }
@@ -239,7 +243,7 @@ const collectibleFor = (athlete, moment, index = 0) => {
 const storyPanelsFor = (athlete, moment) => [
   { k: "SETUP", t: `${moment.y} · ${moment.era}`, b: `${athlete.name} enters a defining chapter: ${moment.title}.` },
   { k: "MOMENT", t: "The verified record", b: moment.body },
-  { k: "PROOF", t: "Why it matters", b: `${sourceDetailsFor(moment).level} through ${moment.src}. This is the layer RICON turns into story, proof, and collectible context.` },
+  { k: "LEGACY", t: "Why it matters", b: `${moment.title} becomes part of the larger legacy arc: the moment fans remember, revisit, ask about, and eventually collect.` },
 ];
 const suggestedPromptsFor = (athlete, moment) => [
   `Tell me about ${moment?.y || athlete.moments[0].y}.`,
@@ -273,14 +277,13 @@ export default function RICONStoryline() {
   const [athlete, setAthlete] = useState(null);
   const [moment, setMoment] = useState(null);
   const [momentIndex, setMomentIndex] = useState(0);
-  const [sourceMoment, setSourceMoment] = useState(null);
   const [twinOpen, setTwinOpen] = useState(false);
   const [twinMode, setTwinMode] = useState("narrator");
 
   const openAthlete = (a) => { setAthlete(a); setScreen("athlete"); };
   const openStory = (a, m, i = 0) => { setAthlete(a); setMoment(m); setMomentIndex(i); setScreen("story"); };
-  const goHome = () => { setScreen("home"); setAthlete(null); setMoment(null); setTwinOpen(false); setSourceMoment(null); };
-  const backToAthlete = () => { setScreen("athlete"); setMoment(null); setSourceMoment(null); };
+  const goHome = () => { setScreen("home"); setAthlete(null); setMoment(null); setTwinOpen(false); };
+  const backToAthlete = () => { setScreen("athlete"); setMoment(null); };
   const openTwin = (mode) => { setTwinMode(mode); setTwinOpen(true); };
 
   return (
@@ -289,10 +292,10 @@ export default function RICONStoryline() {
       <div className="ricon-root">
         {screen === "home" && <HomeScreen onSelect={openAthlete} onStory={openStory} />}
         {screen === "athlete" && athlete && (
-          <AthleteScreen athlete={athlete} onBack={goHome} onTwin={openTwin} onStory={openStory} onSource={(m) => setSourceMoment(m)} />
+          <AthleteScreen athlete={athlete} onBack={goHome} onTwin={openTwin} onStory={openStory} />
         )}
         {screen === "story" && athlete && moment && (
-          <StoryView athlete={athlete} moment={moment} momentIndex={momentIndex} onBack={backToAthlete} onHome={goHome} onTwin={openTwin} onSource={() => setSourceMoment(moment)} />
+          <StoryView athlete={athlete} moment={moment} momentIndex={momentIndex} onBack={backToAthlete} onHome={goHome} onTwin={openTwin} />
         )}
         {twinOpen && athlete && (
           <TwinModal
@@ -302,9 +305,6 @@ export default function RICONStoryline() {
             onClose={() => setTwinOpen(false)}
             onSwitchMode={(m) => setTwinMode(m)}
           />
-        )}
-        {sourceMoment && athlete && (
-          <SourceSheet athlete={athlete} moment={sourceMoment} onClose={() => setSourceMoment(null)} />
         )}
       </div>
     </>
@@ -317,7 +317,7 @@ function HomeScreen({ onSelect, onStory }) {
   const featuredMoment = getFeaturedMoment();
   const proof = sourceDetailsFor(featuredMoment);
   return (
-    <div style={{ minHeight: "100vh", animation: "fadeIn 0.6s ease" }}>
+    <div style={{ minHeight: "100dvh", animation: "fadeIn 0.6s ease" }}>
       {/* Nav */}
       <nav className="ricon-nav" style={{ padding: "26px 40px", display: "flex", alignItems: "center", gap: "14px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
         <span className="bebas" style={{ fontSize: 20, letterSpacing: 5, color: "#C9A84C" }}>RICON</span>
@@ -330,7 +330,7 @@ function HomeScreen({ onSelect, onStory }) {
       </nav>
 
       {/* Hero */}
-      <div className="home-hero" style={{ padding: "58px 40px 48px", display: "grid", gridTemplateColumns: "1.05fr 0.95fr", gap: 36, alignItems: "center", minHeight: "calc(100vh - 92px)" }}>
+      <div className="home-hero" style={{ padding: "58px 40px 48px", display: "grid", gridTemplateColumns: "1.05fr 0.95fr", gap: 36, alignItems: "center", minHeight: "calc(100dvh - 92px)" }}>
         <div style={{ position: "relative", zIndex: 1 }}>
           <div className="mono" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 11px", border: "1px solid rgba(123,200,232,0.28)", color: "#7BC8E8", fontSize: 9, letterSpacing: 2, marginBottom: 26 }}>
             ✓ VERIFIED FEATURED STORY · {proof.level}
@@ -436,11 +436,11 @@ function AthleteCard({ athlete, delay, onClick }) {
 }
 
 // ─── ATHLETE SCREEN ───────────────────────────────────────────────────────────
-function AthleteScreen({ athlete, onBack, onTwin, onStory, onSource }) {
+function AthleteScreen({ athlete, onBack, onTwin, onStory }) {
   const leadMoment = athlete.moments.find(m => m.type === "championship" || m.type === "iconic") || athlete.moments[0];
   const leadIndex = athlete.moments.indexOf(leadMoment);
   return (
-    <div style={{ minHeight: "100vh", animation: "fadeIn 0.4s ease" }}>
+    <div style={{ minHeight: "100dvh", animation: "fadeIn 0.4s ease" }}>
       {/* Sticky Nav */}
       <nav className="ricon-nav" style={{ padding: "22px 40px", display: "flex", alignItems: "center", gap: 18, borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(8,8,8,0.96)", backdropFilter: "blur(24px)", zIndex: 90 }}>
         <button className="mono back-btn" onClick={onBack}
@@ -475,10 +475,6 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory, onSource }) {
             style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 20px", background: "linear-gradient(135deg,#C9A84C,#FFD87A)", color: "#080808", border: "none", cursor: "pointer", borderRadius: 2 }}>
             ▶ PLAY FEATURED MOMENT
           </button>
-          <button onClick={() => onSource(leadMoment)} className="proof-btn"
-            style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 20px", background: "transparent", color: "#7BC8E8", border: "1px solid rgba(123,200,232,0.32)", cursor: "pointer", borderRadius: 2 }}>
-            ✓ OPEN PROOF
-          </button>
         </div>
 
         {/* Stats row */}
@@ -499,7 +495,6 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory, onSource }) {
           compact
           progress={72}
           onPlay={() => onStory(athlete, leadMoment, leadIndex)}
-          onSource={() => onSource(leadMoment)}
           onTwin={() => onTwin("qa")}
         />
       </div>
@@ -525,7 +520,7 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory, onSource }) {
         </div>
         <div style={{ position: "relative" }}>
           <div className="timeline-line" style={{ position: "absolute", left: 114, top: 0, bottom: 0, width: 1, transform: "translateX(-0.5px)", background: "linear-gradient(to bottom,transparent,rgba(201,168,76,0.28) 8%,rgba(201,168,76,0.28) 92%,transparent)" }} />
-          {athlete.moments.map((m, i) => <TimelineMoment key={i} athlete={athlete} moment={m} index={i} total={athlete.moments.length} onStory={() => onStory(athlete, m, i)} onSource={() => onSource(m)} />)}
+          {athlete.moments.map((m, i) => <TimelineMoment key={i} athlete={athlete} moment={m} index={i} total={athlete.moments.length} onStory={() => onStory(athlete, m, i)} />)}
         </div>
       </div>
 
@@ -542,7 +537,7 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory, onSource }) {
 }
 
 // ─── TIMELINE MOMENT ──────────────────────────────────────────────────────────
-function TimelineMoment({ athlete, moment, index, total, onStory, onSource }) {
+function TimelineMoment({ athlete, moment, index, total, onStory }) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
   const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
@@ -581,10 +576,9 @@ function TimelineMoment({ athlete, moment, index, total, onStory, onSource }) {
             {moment.title}
           </button>
           <div className="timeline-body cormorant" style={{ fontStyle: "italic", fontSize: 17, color: "rgba(240,235,227,0.62)", lineHeight: 1.75, marginBottom: 14, maxWidth: 660 }}>{moment.body}</div>
-          <TimelineVideoPreview athlete={athlete} moment={moment} index={index} onPlay={onStory} onSource={onSource} />
+          <TimelineVideoPreview athlete={athlete} moment={moment} index={index} onPlay={onStory} />
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ width: 8, height: 1, background: "#333" }} />
-            <button onClick={onSource} className="proof-btn mono" style={{ fontSize: 9, color: "#5d5d5d", letterSpacing: 1, background: "transparent", border: "1px solid rgba(255,255,255,0.06)", padding: "6px 9px", cursor: "pointer", borderRadius: 2 }}>✓ {moment.src}</button>
             <button onClick={onStory} className="story-card-btn mono" style={{ fontSize: 9, color: "#C9A84C", letterSpacing: 2, background: "transparent", border: "1px solid rgba(201,168,76,0.22)", padding: "6px 10px", cursor: "pointer", borderRadius: 2 }}>PLAY STORY →</button>
           </div>
         </div>
@@ -593,7 +587,7 @@ function TimelineMoment({ athlete, moment, index, total, onStory, onSource }) {
   );
 }
 
-function TimelineVideoPreview({ athlete, moment, index, onPlay, onSource }) {
+function TimelineVideoPreview({ athlete, moment, index, onPlay }) {
   const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
   const collectible = collectibleFor(athlete, moment, index);
   const progress = 28 + ((index * 17) % 56);
@@ -603,7 +597,7 @@ function TimelineVideoPreview({ athlete, moment, index, onPlay, onSource }) {
       <div style={{ position: "relative", zIndex: 1, minHeight: "inherit", padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", textAlign: "left" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
           <div>
-            <div className="mono" style={{ fontSize: 8, letterSpacing: 3, color: "#7BC8E8", marginBottom: 8 }}>VIDEO PREVIEW</div>
+            <div className="mono" style={{ fontSize: 8, letterSpacing: 3, color: "#7BC8E8", marginBottom: 8 }}>STORY PREVIEW</div>
             <div className="bebas" style={{ fontSize: 30, letterSpacing: 3, color: "#F0EBE3", lineHeight: 1 }}>{athlete.initials}</div>
           </div>
           <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: cfg.color, border: `1px solid ${cfg.color}55`, padding: "5px 8px" }}>{cfg.label}</div>
@@ -614,7 +608,7 @@ function TimelineVideoPreview({ athlete, moment, index, onPlay, onSource }) {
             <span className="bebas" style={{ fontSize: 22, transform: "translateX(1px)" }}>▶</span>
           </span>
           <div style={{ flex: 1 }}>
-            <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#777", marginBottom: 8 }}>{moment.y} · MUTED LOOP · TAP TO EXPAND</div>
+            <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#777", marginBottom: 8 }}>{moment.y} · TAP TO OPEN STORY</div>
             <div style={{ height: 3, background: "rgba(255,255,255,0.12)" }}>
               <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#7BC8E8,#C9A84C,#FFD87A)" }} />
             </div>
@@ -623,22 +617,22 @@ function TimelineVideoPreview({ athlete, moment, index, onPlay, onSource }) {
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", position: "relative", zIndex: 2 }}>
           <span className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#7BC8E8", border: "1px solid rgba(123,200,232,0.24)", padding: "5px 8px" }}>CAPTIONS</span>
-          <span className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#C9A84C", border: "1px solid rgba(201,168,76,0.24)", padding: "5px 8px" }}>PROOF HOTSPOT</span>
+          <span className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#C9A84C", border: "1px solid rgba(201,168,76,0.24)", padding: "5px 8px" }}>STORY HOTSPOT</span>
           {collectible && <span className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#FFD87A", border: "1px solid rgba(255,216,122,0.22)", padding: "5px 8px" }}>OWNABLE</span>}
         </div>
       </div>
-      <span onClick={(e) => { e.stopPropagation(); onSource(); }} className="hotspot" style={{ position: "absolute", right: 18, bottom: 18, zIndex: 3, width: 12, height: 12, borderRadius: "50%", background: "#7BC8E8", border: "1px solid #7BC8E8" }} />
+      <span className="hotspot" aria-hidden="true" style={{ position: "absolute", right: 18, bottom: 18, zIndex: 3, width: 14, height: 14, borderRadius: "50%", background: "#7BC8E8", border: "1px solid #7BC8E8" }} />
     </button>
   );
 }
 
 // ─── INTERACTIVE VIDEO MODULE ─────────────────────────────────────────────────
-function InteractiveStoryVideo({ athlete, moment, compact = false, progress = 0, onPlay, onSource, onTwin }) {
+function InteractiveStoryVideo({ athlete, moment, compact = false, progress = 0, onPlay, onTwin }) {
   const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
   const source = sourceDetailsFor(moment);
   const clampedProgress = Math.max(8, Math.min(progress, 100));
   const hotspots = [
-    { label: "PROOF", x: "18%", y: "22%", color: "#7BC8E8", onClick: onSource },
+    { label: "STORY", x: "18%", y: "22%", color: "#7BC8E8", onClick: onPlay },
     { label: "STATS", x: "72%", y: "30%", color: "#C9A84C", onClick: onPlay },
     { label: "TWIN", x: "58%", y: "70%", color: "#FFD87A", onClick: onTwin },
   ];
@@ -665,7 +659,8 @@ function InteractiveStoryVideo({ athlete, moment, compact = false, progress = 0,
         </button>
 
         {hotspots.map((h, i) => (
-          <button key={h.label} onClick={h.onClick} className="hotspot mono" style={{ position: "absolute", left: h.x, top: h.y, transform: "translate(-50%,-50%)", width: 12, height: 12, borderRadius: "50%", border: `1px solid ${h.color}`, background: h.color, cursor: "pointer" }} aria-label={`${h.label} hotspot`}>
+          <button key={h.label} onClick={h.onClick} className="hotspot mono" style={{ position: "absolute", left: h.x, top: h.y, transform: "translate(-50%,-50%)", width: 44, height: 44, borderRadius: "50%", border: "none", background: "transparent", cursor: "pointer" }} aria-label={`${h.label} hotspot`}>
+            <span aria-hidden="true" style={{ position: "absolute", left: 16, top: 16, width: 12, height: 12, borderRadius: "50%", border: `1px solid ${h.color}`, background: h.color }} />
             <span style={{ position: "absolute", left: 16, top: -4, color: h.color, fontSize: 8, letterSpacing: 2, whiteSpace: "nowrap", animationDelay: `${i * 0.2}s` }}>{h.label}</span>
           </button>
         ))}
@@ -681,7 +676,7 @@ function InteractiveStoryVideo({ athlete, moment, compact = false, progress = 0,
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
             <div className="mono" style={{ fontSize: 8, color: "#777", letterSpacing: 1 }}>{moment.y} · {source.level}</div>
-            <div className="mono" style={{ fontSize: 8, color: "#555", letterSpacing: 1 }}>CAPTIONS · HOTSPOTS · PROOF</div>
+            <div className="mono" style={{ fontSize: 8, color: "#555", letterSpacing: 1 }}>CAPTIONS · HOTSPOTS · STORY</div>
           </div>
         </div>
       </div>
@@ -690,7 +685,7 @@ function InteractiveStoryVideo({ athlete, moment, compact = false, progress = 0,
 }
 
 // ─── STORY VIEW ───────────────────────────────────────────────────────────────
-function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin, onSource }) {
+function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin }) {
   const [step, setStep] = useState(0);
   const panels = storyPanelsFor(athlete, moment);
   const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
@@ -713,7 +708,6 @@ function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin, onSou
         <div style={{ width: 1, height: 16, background: "#252525" }} />
         <span className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8" }}>{athlete.name}</span>
         <div style={{ flex: 1 }} />
-        <button className="proof-btn mono" onClick={onSource} style={{ fontSize: 9, letterSpacing: 2, color: "#C9A84C", background: "transparent", border: "1px solid rgba(201,168,76,0.25)", padding: "8px 12px", cursor: "pointer" }}>✓ PROOF</button>
         <button className="hide-mobile mono" onClick={onHome} style={{ fontSize: 9, letterSpacing: 2, color: "#555", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", padding: "8px 12px", cursor: "pointer" }}>ROSTER</button>
       </nav>
 
@@ -753,12 +747,10 @@ function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin, onSou
             moment={moment}
             progress={progress}
             onPlay={complete ? () => onTwin("qa") : next}
-            onSource={onSource}
             onTwin={() => onTwin("qa")}
           />
 
           <div>
-            <button onClick={onSource} className="proof-btn mono" style={{ width: "100%", fontSize: 9, letterSpacing: 2, padding: "12px 14px", color: "#7BC8E8", background: "rgba(123,200,232,0.04)", border: "1px solid rgba(123,200,232,0.24)", cursor: "pointer", marginBottom: 10 }}>OPEN VERIFIED SOURCE SHEET</button>
             {collectible && complete && (
               <div style={{ padding: 18, border: "1px solid rgba(201,168,76,0.32)", background: "linear-gradient(135deg,rgba(201,168,76,0.12),rgba(255,255,255,0.03))", animation: "fadeUp 0.4s ease" }}>
                 <div className="mono" style={{ fontSize: 9, color: "#C9A84C", letterSpacing: 2, marginBottom: 10 }}>OWN THIS MOMENT</div>
@@ -775,71 +767,12 @@ function StoryView({ athlete, moment, momentIndex, onBack, onHome, onTwin, onSou
   );
 }
 
-// ─── SOURCE SHEET ─────────────────────────────────────────────────────────────
-function SourceSheet({ athlete, moment, onClose }) {
-  const source = sourceDetailsFor(moment);
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1200, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "end", justifyContent: "center", animation: "fadeIn 0.22s ease" }} onClick={onClose}>
-      <div className="story-panel" onClick={(e) => e.stopPropagation()} style={{ width: "min(860px,100%)", maxHeight: "86vh", overflowY: "auto", padding: "30px 34px", borderRadius: "8px 8px 0 0", borderBottom: "none" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 18, alignItems: "start", marginBottom: 24 }}>
-          <div>
-            <div className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8", marginBottom: 8 }}>VERIFIED SOURCE SHEET</div>
-            <div className="bebas" style={{ fontSize: 34, letterSpacing: 3, color: "#F0EBE3" }}>{moment.title}</div>
-          </div>
-          <button onClick={onClose} className="proof-btn mono" style={{ fontSize: 9, letterSpacing: 2, color: "#777", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", padding: "9px 12px", cursor: "pointer" }}>CLOSE</button>
-        </div>
-
-        <div className="compact-grid" style={{ marginBottom: 26 }}>
-          {[["ATHLETE", athlete.name], ["MOMENT", `${moment.y} · ${moment.era}`], ["LEVEL", source.level], ["REVIEWER", source.reviewer]].map(([label, value]) => (
-            <div key={label} style={{ padding: 16, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-              <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#555", marginBottom: 7 }}>{label}</div>
-              <div style={{ fontSize: 13, color: "rgba(240,235,227,0.72)", lineHeight: 1.45 }}>{value}</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ marginBottom: 24 }}>
-          <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#C9A84C", marginBottom: 10 }}>FACT SUMMARY</div>
-          <div className="cormorant" style={{ fontStyle: "italic", fontSize: 21, color: "#F0EBE3", lineHeight: 1.65 }}>{source.summary}</div>
-        </div>
-
-        <div style={{ padding: 20, border: "1px solid rgba(123,200,232,0.18)", background: "rgba(123,200,232,0.045)", marginBottom: 20 }}>
-          <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#7BC8E8", marginBottom: 12 }}>PRIMARY SOURCE</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 16 }}>
-            <SourceField label="Name" value={source.name} />
-            <SourceField label="Type" value={source.type} />
-            <SourceField label="Publisher" value={source.publisher} />
-            <SourceField label="Accessed" value={source.accessed} />
-            <SourceField label="URL" value={source.url} />
-          </div>
-        </div>
-
-        <div style={{ padding: 18, background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.18)" }}>
-          <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#C9A84C", marginBottom: 8 }}>HOW RICON VERIFIES DATA</div>
-          <div style={{ fontSize: 13, lineHeight: 1.7, color: "rgba(240,235,227,0.55)" }}>
-            Each public claim is tied to a moment, a source record, a verification level, and editorial review. Production RICON Core would require source coverage and approval status before this fact could power stories, Twin responses, or commerce context.
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SourceField({ label, value }) {
-  return (
-    <div>
-      <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#555", marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 13, color: "rgba(240,235,227,0.68)", lineHeight: 1.45 }}>{value}</div>
-    </div>
-  );
-}
-
 function VoiceSynthesisPanel({ active, status, onPlay, onStop, mode }) {
   return (
     <div className="voice-panel">
       <div>
         <div className="mono" style={{ fontSize: 8, color: "#7BC8E8", letterSpacing: 2, marginBottom: 5 }}>
-          {mode === "narrator" ? "NARRATOR VOICE SYNTHESIS" : "AI VOICE RESPONSE"}
+          {mode === "narrator" ? "NARRATOR VOICE VISUALIZATION" : "AI RESPONSE VISUALIZATION"}
         </div>
         <div className="mono" style={{ fontSize: 8, color: "#555", letterSpacing: 1 }}>{status}</div>
       </div>
@@ -877,7 +810,7 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
 
   const showVoice = (index = "latest") => {
     setSpeakingIndex(index);
-    setVoiceStatus("Voice synthesis visual only. Audio muted for demo quality.");
+    setVoiceStatus("Voice visualization only. Audio muted for demo quality.");
   };
 
   const stopVoiceVisual = () => {
@@ -1117,7 +1050,7 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
                   style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 16px", background: isListening ? "rgba(123,200,232,0.16)" : "transparent", color: isListening ? "#7BC8E8" : "#C9A84C", border: "1px solid rgba(201,168,76,0.28)", borderRadius: 2, cursor: loading ? "not-allowed" : "pointer", transition: "all 0.2s" }}>
                   {isListening ? "STOP MIC" : "ASK BY VOICE"}
                 </button>
-                <input className="twin-input" value={input} onChange={e => setInput(e.target.value)}
+                <input className="twin-input" aria-label={`Ask ${athlete.name} a question`} autoComplete="off" value={input} onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendQA())}
                 placeholder={`Ask ${athlete.name.split(" ")[0]} anything...`}
                 disabled={loading}
@@ -1133,7 +1066,7 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
               <div style={{ padding: "20px 36px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
                 <div className="voice-panel" style={{ flexBasis: "100%", maxWidth: 540 }}>
                   <div>
-                    <div className="mono" style={{ fontSize: 8, color: "#7BC8E8", letterSpacing: 2, marginBottom: 5 }}>VOICE SYNTHESIS</div>
+                    <div className="mono" style={{ fontSize: 8, color: "#7BC8E8", letterSpacing: 2, marginBottom: 5 }}>VOICE VISUALIZATION</div>
                     <div className="mono" style={{ fontSize: 8, color: "#555", letterSpacing: 1 }}>{voiceStatus}</div>
                   </div>
                   <div className="voice-bars" aria-hidden="true">{[0,1,2,3,4].map(i => <span key={i} style={{ animationPlayState: speakingIndex !== null ? "running" : "paused" }} />)}</div>
