@@ -50,6 +50,8 @@ const CSS = `
   .timeline-video { position:relative; overflow:hidden; width:min(520px,100%); min-height:154px; margin:18px 0 16px; border:1px solid rgba(255,255,255,0.08); background:#090909; cursor:pointer; }
   .timeline-video:before { content:""; position:absolute; inset:-30%; background:radial-gradient(circle at 24% 30%,rgba(123,200,232,0.18),transparent 24%),radial-gradient(circle at 74% 68%,rgba(201,168,76,0.22),transparent 30%),linear-gradient(135deg,rgba(255,255,255,0.06),transparent 45%); animation:slowDrift 12s ease-in-out infinite; }
   .timeline-video:after { content:""; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(0,0,0,0.08),rgba(0,0,0,0.62)),repeating-linear-gradient(to bottom,rgba(255,255,255,0.035) 0,rgba(255,255,255,0.035) 1px,transparent 1px,transparent 8px); pointer-events:none; }
+  .timeline-dot { width:36px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; }
+  .timeline-content { flex:1; padding-left:18px; padding-bottom:20px; }
   .hotspot { animation:hotspotPulse 2.4s ease-in-out infinite; }
   .voice-panel { border:1px solid rgba(201,168,76,0.18); background:rgba(201,168,76,0.045); padding:12px 14px; margin-top:14px; display:flex; align-items:center; justify-content:space-between; gap:14px; }
   .voice-bars { display:flex; align-items:center; gap:4px; height:32px; }
@@ -67,10 +69,17 @@ const CSS = `
     .home-hero { grid-template-columns:1fr !important; padding-top:36px !important; }
     .story-layout, .twin-layout { flex-direction:column !important; }
     .twin-sidebar { display:none !important; }
-    .timeline-line { display:none !important; }
-    .timeline-row { gap:12px !important; }
-    .timeline-year { width:64px !important; }
-    .timeline-video { min-height:178px !important; }
+    .timeline-wrap { padding:44px 20px 64px !important; }
+    .timeline-heading { margin-bottom:34px !important; line-height:1.7 !important; }
+    .timeline-line, .timeline-dot { display:none !important; }
+    .timeline-row { display:block !important; margin-bottom:44px !important; padding:22px 0 34px !important; border-bottom:1px solid rgba(255,255,255,0.06) !important; }
+    .timeline-year { width:auto !important; display:flex !important; gap:10px !important; align-items:center !important; margin-bottom:16px !important; }
+    .timeline-year .mono:first-child { font-size:14px !important; }
+    .timeline-year .mono:last-child { margin-top:0 !important; font-size:8px !important; }
+    .timeline-content { padding-left:0 !important; padding-bottom:0 !important; border-bottom:none !important; }
+    .timeline-title { font-size:34px !important; line-height:1.05 !important; max-width:100% !important; }
+    .timeline-body { font-size:20px !important; line-height:1.65 !important; max-width:100% !important; }
+    .timeline-video { width:100% !important; min-height:260px !important; margin:20px 0 18px !important; }
     .twin-modal { overflow-y:auto !important; backdrop-filter:none !important; }
     .twin-header { padding:18px 18px !important; align-items:flex-start !important; gap:14px !important; flex-wrap:wrap !important; }
     .twin-title { width:100% !important; }
@@ -510,8 +519,8 @@ function AthleteScreen({ athlete, onBack, onTwin, onStory, onSource }) {
       </div>
 
       {/* Timeline */}
-      <div style={{ padding: "72px 40px 80px" }}>
-        <div className="mono" style={{ fontSize: 10, letterSpacing: 6, color: "#3a3a3a", marginBottom: 56 }}>
+      <div className="timeline-wrap" style={{ padding: "72px 40px 80px" }}>
+        <div className="timeline-heading mono" style={{ fontSize: 10, letterSpacing: 6, color: "#3a3a3a", marginBottom: 56 }}>
           CAREER TIMELINE · {athlete.moments.length} VERIFIED MOMENTS
         </div>
         <div style={{ position: "relative" }}>
@@ -555,11 +564,11 @@ function TimelineMoment({ athlete, moment, index, total, onStory, onSource }) {
           <div className="mono" style={{ fontSize: 8, color: "#3a3a3a", letterSpacing: 1, marginTop: 5, lineHeight: 1.5 }}>{moment.era}</div>
         </div>
         {/* Dot */}
-        <div style={{ width: 36, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div className="timeline-dot">
           <div style={{ width: 10, height: 10, borderRadius: "50%", background: cfg.color, boxShadow: `0 0 10px ${cfg.color}80`, marginTop: 4, flexShrink: 0 }} />
         </div>
         {/* Content */}
-        <div style={{ flex: 1, paddingLeft: 18, paddingBottom: 20, borderBottom: index < total - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+        <div className="timeline-content" style={{ borderBottom: index < total - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 12, padding: "3px 10px", border: `1px solid ${cfg.color}40`, borderRadius: 2 }}>
             <span className="mono" style={{ fontSize: 9, letterSpacing: 2, color: cfg.color }}>{cfg.icon} {cfg.label}</span>
           </div>
@@ -568,10 +577,10 @@ function TimelineMoment({ athlete, moment, index, total, onStory, onSource }) {
               OWNABLE MOMENT
             </div>
           )}
-          <button onClick={onStory} className="story-card-btn bebas" style={{ display: "block", textAlign: "left", fontSize: 24, letterSpacing: 2, color: "#F0EBE3", lineHeight: 1.2, marginBottom: 12, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          <button onClick={onStory} className="timeline-title story-card-btn bebas" style={{ display: "block", textAlign: "left", fontSize: 24, letterSpacing: 2, color: "#F0EBE3", lineHeight: 1.2, marginBottom: 12, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
             {moment.title}
           </button>
-          <div className="cormorant" style={{ fontStyle: "italic", fontSize: 17, color: "rgba(240,235,227,0.62)", lineHeight: 1.75, marginBottom: 14, maxWidth: 660 }}>{moment.body}</div>
+          <div className="timeline-body cormorant" style={{ fontStyle: "italic", fontSize: 17, color: "rgba(240,235,227,0.62)", lineHeight: 1.75, marginBottom: 14, maxWidth: 660 }}>{moment.body}</div>
           <TimelineVideoPreview athlete={athlete} moment={moment} index={index} onPlay={onStory} onSource={onSource} />
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ width: 8, height: 1, background: "#333" }} />
