@@ -1,0 +1,169 @@
+:root {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-family-body);
+  color: var(--color-text-primary);
+  background: var(--color-bg-app);
+}
+
+.ds-display,
+.type-display-xl,
+.type-display-lg,
+.type-heading-xl,
+.type-heading-lg,
+.type-heading-md,
+.type-stat {
+  font-family: var(--font-family-display);
+  font-stretch: condensed;
+  text-transform: uppercase;
+}
+
+.ds-heading,
+.type-body-lg,
+.type-body-md,
+.type-body-sm,
+.type-caption {
+  font-family: var(--font-family-body);
+}
+
+.ds-body,
+.type-body-lg,
+.type-body-md,
+.type-body-sm {
+  font-family: var(--font-family-body);
+  font-weight: var(--font-weight-regular);
+  letter-spacing: var(--letter-spacing-none);
+}
+
+.ds-meta,
+.type-label,
+.type-stat-mono {
+  font-family: var(--font-family-mono);
+}
+
+.ds-display {
+  font-size: var(--type-display-lg-size);
+  font-weight: var(--type-display-lg-weight);
+  line-height: var(--type-display-lg-line);
+  letter-spacing: var(--type-display-lg-tracking);
+}
+
+.ds-heading {
+  font-size: var(--type-heading-lg-size);
+  font-weight: var(--type-heading-lg-weight);
+  line-height: var(--type-heading-lg-line);
+  letter-spacing: var(--letter-spacing-none);
+}
+
+.ds-body {
+  font-size: var(--type-body-md-size);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--type-body-md-line);
+  letter-spacing: var(--letter-spacing-none);
+}
+
+.ds-meta {
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+}
+
+.type-display-xl {
+  font-size: var(--type-display-xl-size);
+  font-weight: var(--type-display-xl-weight);
+  line-height: var(--type-display-xl-line);
+  letter-spacing: var(--type-display-xl-tracking);
+}
+
+.type-display-lg {
+  font-size: var(--type-display-lg-size);
+  font-weight: var(--type-display-lg-weight);
+  line-height: var(--type-display-lg-line);
+  letter-spacing: var(--type-display-lg-tracking);
+}
+
+.type-heading-xl {
+  font-size: var(--type-heading-xl-size);
+  font-weight: var(--type-heading-xl-weight);
+  line-height: var(--type-heading-xl-line);
+  letter-spacing: var(--type-heading-xl-tracking);
+}
+
+.type-heading-lg {
+  font-size: var(--type-heading-lg-size);
+  font-weight: var(--type-heading-lg-weight);
+  line-height: var(--type-heading-lg-line);
+  letter-spacing: var(--type-heading-lg-tracking);
+}
+
+.type-heading-md {
+  font-size: var(--type-heading-md-size);
+  font-weight: var(--type-heading-md-weight);
+  line-height: var(--type-heading-md-line);
+  letter-spacing: var(--type-heading-md-tracking);
+}
+
+.type-body-lg {
+  font-size: var(--type-body-lg-size);
+  font-weight: var(--type-body-lg-weight);
+  line-height: var(--type-body-lg-line);
+  letter-spacing: var(--type-body-lg-tracking);
+}
+
+.type-body-md {
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-line);
+  letter-spacing: var(--type-body-md-tracking);
+}
+
+.type-body-sm {
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line);
+  letter-spacing: var(--type-body-sm-tracking);
+}
+
+.type-caption {
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  line-height: var(--type-caption-line);
+  letter-spacing: var(--type-caption-tracking);
+}
+
+.type-label {
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-line);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+}
+
+.type-stat {
+  font-size: var(--type-stat-size);
+  font-weight: var(--type-stat-weight);
+  line-height: var(--type-stat-line);
+  letter-spacing: var(--type-stat-tracking);
+}
+
+.type-stat-mono {
+  font-size: var(--type-stat-size);
+  font-weight: 700;
+  line-height: var(--type-stat-line);
+  letter-spacing: 0;
+}
+
+@media (max-width: 480px) {
+  :root {
+    --type-label-size: 0.75rem;
+    --type-label-tracking: 0.065em;
+    --type-caption-size: 0.8125rem;
+    --type-body-md-size: 1rem;
+  }
+}

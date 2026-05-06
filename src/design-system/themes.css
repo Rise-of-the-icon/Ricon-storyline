@@ -1,0 +1,47 @@
+@import "./tokens.css";
+@import "./typography.css";
+@import "./motion.css";
+
+:root {
+  color-scheme: dark;
+  accent-color: var(--color-gold);
+}
+
+html {
+  background: var(--color-bg-app);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+::selection {
+  color: var(--color-ink-950);
+  background: var(--color-teal);
+}
+
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.ds-glass {
+  background: var(--glass-bg);
+  border: var(--border-glass);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(var(--glass-blur-md)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur-md)) saturate(var(--glass-saturate));
+}
+
+.ds-glass-subtle {
+  background: var(--glass-bg-subtle);
+  border: var(--border-subtle);
+  backdrop-filter: blur(var(--glass-blur-sm)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm)) saturate(var(--glass-saturate));
+}
+
+.ds-focus-ring {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}

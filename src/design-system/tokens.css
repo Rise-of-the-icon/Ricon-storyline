@@ -1,0 +1,186 @@
+:root {
+  /* Color: ink */
+  --color-ink-950: #080A0F;
+  --color-ink-900: #10131C;
+  --color-ink-800: #171C2A;
+
+  /* Color: text */
+  --color-text-primary: #F7F5EF;
+  --color-text-secondary: #B9B7AE;
+  --color-text-muted: #7D7A72;
+
+  /* Color: accents */
+  --color-gold: #D6B45F;
+  --color-teal: #64F4E8;
+  --color-violet: #8A7CFF;
+  --color-coral: #FF6B4A;
+
+  /* Color: surfaces */
+  --color-surface-card: rgba(255, 255, 255, 0.06);
+  --color-surface-glass: rgba(255, 255, 255, 0.08);
+  --color-border-glass: rgba(255, 255, 255, 0.14);
+
+  /* Semantic colors */
+  --color-bg-app: var(--color-ink-950);
+  --color-bg-panel: var(--color-ink-900);
+  --color-bg-elevated: var(--color-ink-800);
+  --color-action-primary: var(--color-gold);
+  --color-action-ai: var(--color-teal);
+  --color-action-premium: var(--color-violet);
+  --color-danger: var(--color-coral);
+
+  /* Typography */
+  --font-family-display: "Bebas Neue", "Anton", "Arial Narrow", Impact, sans-serif;
+  --font-family-body: "Inter", "Montserrat", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-family-sans: var(--font-family-body);
+  --font-family-mono: "Space Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-size-2xs: 0.5rem;
+  --font-size-xs: 0.625rem;
+  --font-size-sm: 0.8125rem;
+  --font-size-md: 0.9375rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.375rem;
+  --font-size-2xl: 1.75rem;
+  --font-size-3xl: 2.25rem;
+  --font-size-4xl: 3rem;
+  --font-size-5xl: 4rem;
+  --type-display-xl-size: clamp(4.25rem, 11vw, 9rem);
+  --type-display-xl-line: 0.86;
+  --type-display-xl-weight: 400;
+  --type-display-xl-tracking: 0.06em;
+  --type-display-lg-size: clamp(3.25rem, 8.5vw, 7rem);
+  --type-display-lg-line: 0.88;
+  --type-display-lg-weight: 400;
+  --type-display-lg-tracking: 0.055em;
+  --type-heading-xl-size: clamp(2.5rem, 6vw, 4.75rem);
+  --type-heading-xl-line: 0.98;
+  --type-heading-xl-weight: 400;
+  --type-heading-xl-tracking: 0.045em;
+  --type-heading-lg-size: clamp(2rem, 4.6vw, 3.5rem);
+  --type-heading-lg-line: 1;
+  --type-heading-lg-weight: 400;
+  --type-heading-lg-tracking: 0.035em;
+  --type-heading-md-size: clamp(1.5rem, 3.4vw, 2.5rem);
+  --type-heading-md-line: 1.08;
+  --type-heading-md-weight: 400;
+  --type-heading-md-tracking: 0.025em;
+  --type-body-lg-size: clamp(1.0625rem, 1.5vw, 1.375rem);
+  --type-body-lg-line: 1.68;
+  --type-body-lg-weight: 400;
+  --type-body-lg-tracking: 0;
+  --type-body-md-size: clamp(0.9375rem, 1.1vw, 1.0625rem);
+  --type-body-md-line: 1.65;
+  --type-body-md-weight: 400;
+  --type-body-md-tracking: 0;
+  --type-body-sm-size: clamp(0.8125rem, 0.95vw, 0.9375rem);
+  --type-body-sm-line: 1.58;
+  --type-body-sm-weight: 400;
+  --type-body-sm-tracking: 0;
+  --type-caption-size: clamp(0.75rem, 0.85vw, 0.8125rem);
+  --type-caption-line: 1.45;
+  --type-caption-weight: 500;
+  --type-caption-tracking: 0.01em;
+  --type-label-size: clamp(0.6875rem, 0.8vw, 0.75rem);
+  --type-label-line: 1.35;
+  --type-label-weight: 700;
+  --type-label-tracking: 0.08em;
+  --type-stat-size: clamp(1.75rem, 4vw, 3.25rem);
+  --type-stat-line: 0.94;
+  --type-stat-weight: 400;
+  --type-stat-tracking: 0.045em;
+  --line-height-tight: 0.9;
+  --line-height-heading: 1.08;
+  --line-height-body: 1.6;
+  --line-height-relaxed: 1.75;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-black: 800;
+  --letter-spacing-none: 0;
+  --letter-spacing-meta: 0.12em;
+  --letter-spacing-display: 0.08em;
+
+  /* Spacing */
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+
+  /* Radius */
+  --radius-none: 0;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 999px;
+  --radius-circle: 50%;
+
+  /* Borders */
+  --border-width-hairline: 1px;
+  --border-subtle: 1px solid rgba(255, 255, 255, 0.08);
+  --border-glass: 1px solid var(--color-border-glass);
+  --border-gold: 1px solid rgba(214, 180, 95, 0.36);
+  --border-teal: 1px solid rgba(100, 244, 232, 0.34);
+
+  /* Shadows */
+  --shadow-none: none;
+  --shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.22);
+  --shadow-md: 0 18px 44px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.44);
+  --shadow-gold-glow: 0 0 34px rgba(214, 180, 95, 0.18);
+  --shadow-teal-glow: 0 0 34px rgba(100, 244, 232, 0.16);
+
+  /* Glass surfaces */
+  --glass-bg-subtle: rgba(255, 255, 255, 0.05);
+  --glass-bg: var(--color-surface-glass);
+  --glass-bg-strong: rgba(255, 255, 255, 0.11);
+  --glass-border: var(--color-border-glass);
+  --glass-blur-sm: 12px;
+  --glass-blur-md: 20px;
+  --glass-blur-lg: 28px;
+  --glass-saturate: 135%;
+
+  /* Z-index */
+  --z-base: 0;
+  --z-content: 1;
+  --z-sticky: 90;
+  --z-overlay: 900;
+  --z-modal: 1000;
+  --z-toast: 1200;
+
+  /* Breakpoints */
+  --breakpoint-xs: 360px;
+  --breakpoint-sm: 480px;
+  --breakpoint-md: 760px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1440px;
+
+  /* Focus states */
+  --focus-ring-color: var(--color-teal);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 3px;
+  --focus-ring: var(--focus-ring-width) solid var(--focus-ring-color);
+
+  /* Existing app compatibility aliases */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --text-primary: var(--color-text-primary);
+  --text-body: rgba(247, 245, 239, 0.82);
+  --text-caption: rgba(247, 245, 239, 0.72);
+  --text-meta: var(--color-text-muted);
+  --text-disabled: rgba(185, 183, 174, 0.56);
+  --error-text: #ffb3a6;
+}

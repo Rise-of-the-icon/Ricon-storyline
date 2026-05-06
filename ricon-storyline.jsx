@@ -2,6 +2,14 @@ import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { configureHaptics, triggerHaptic } from "./src/haptics.js";
 import { ErrorState, EmptyState, LoadingState, RetryAction } from "./src/ui/StateStates.jsx";
 import ErrorBoundary from "./src/ui/ErrorBoundary.jsx";
+import FeaturedStoryHero from "./src/components/home/FeaturedStoryHero.jsx";
+import ExperienceModeSection from "./src/components/home/ExperienceModeSection.jsx";
+import FeaturedTimelinePreview from "./src/components/home/FeaturedTimelinePreview.jsx";
+import AIPromptDemo from "./src/components/home/AIPromptDemo.jsx";
+import StoryLibraryPreview from "./src/components/home/StoryLibraryPreview.jsx";
+import VerificationSection from "./src/components/home/VerificationSection.jsx";
+import michaelJordanLastShotStory from "./src/data/stories/michael-jordan-last-shot";
+import StoryExperiencePage from "./src/pages/story/StoryExperiencePage.jsx";
 
 const CSS = `
   :root {
@@ -664,8 +672,12 @@ const chapterForContext = (athlete, moment, hash = window.location.hash) => {
   return chapters[Math.min(Math.max((hashNumber || 1) - 1, 0), chapters.length - 1)] || chapters[0];
 };
 const isKnownAppPath = (pathname = window.location.pathname) => (
-  pathname === "/" || pathname === "/index.html"
+  pathname === "/" || pathname === "/index.html" || /^\/stories\/[^/]+\/?$/.test(pathname)
 );
+const storySlugFromPath = (pathname = window.location.pathname) => {
+  const match = pathname.match(/^\/stories\/([^/]+)\/?$/);
+  return match ? decodeURIComponent(match[1]) : "";
+};
 const suggestionConfigFor = (athlete) => Object.fromEntries(chaptersFor(athlete).map((chapter) => {
   const firstName = athlete.name.split(" ")[0];
   const scene = chapter.title;
@@ -884,8 +896,9 @@ RULES — NON-NEGOTIABLE:
 
 export default function RICONStoryline() {
   const initialChapter = chapterNumberFromHash();
+  const initialStorySlug = storySlugFromPath();
   const routeMissing = !isKnownAppPath();
-  const [screen, setScreen] = useState(initialChapter ? "athlete" : "home");
+  const [screen, setScreen] = useState(initialStorySlug ? "story-experience" : (initialChapter ? "athlete" : "home"));
   const [athlete, setAthlete] = useState(initialChapter ? getFeaturedAthlete() : null);
   const [moment, setMoment] = useState(null);
   const [momentIndex, setMomentIndex] = useState(0);
@@ -907,6 +920,11 @@ export default function RICONStoryline() {
   const goHome = () => {
     window.history.pushState(null, "", "/");
     setScreen("home"); setAthlete(null); setMoment(null); setTwinOpen(false);
+  };
+  const openStoryExperience = (slug = michaelJordanLastShotStory.slug) => {
+    window.history.pushState(null, "", `/stories/${encodeURIComponent(slug)}`);
+    setScreen("story-experience");
+    setTwinOpen(false);
   };
   const backToAthlete = () => { setScreen("athlete"); setMoment(null); };
   const openTwin = (mode) => {
@@ -954,9 +972,40 @@ export default function RICONStoryline() {
     if (!savedMoment) return;
     openStory(savedAthlete, savedMoment, savedIndex, saved.sceneNumber || 1);
   };
+  const openFeaturedStoryGuide = () => {
+    const featuredAthlete = getFeaturedAthlete();
+    const featuredMoment = getFeaturedMoment();
+    setAthlete(featuredAthlete);
+    setMoment(normalizeStoryData(featuredAthlete, featuredMoment, FEATURED.momentIndex));
+    setMomentIndex(FEATURED.momentIndex);
+    openTwin("qa");
+  };
 
   useEffect(() => {
     configureHaptics({ enabled: APP_CONFIG.hapticsEnabled });
+  }, []);
+
+  useEffect(() => {
+    const syncRoute = () => {
+      if (storySlugFromPath()) {
+        setScreen("story-experience");
+        setTwinOpen(false);
+        return;
+      }
+      if (chapterNumberFromHash()) {
+        setAthlete((current) => current || getFeaturedAthlete());
+        setScreen((current) => (current === "story" ? current : "athlete"));
+        return;
+      }
+      if (isKnownAppPath()) {
+        setScreen("home");
+        setAthlete(null);
+        setMoment(null);
+        setTwinOpen(false);
+      }
+    };
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
   }, []);
 
   useEffect(() => {
@@ -982,12 +1031,15 @@ export default function RICONStoryline() {
         {routeMissing && <NotFoundScreen onHome={goHome} />}
         {!routeMissing && (
           <>
-        {screen === "home" && <HomeScreen onSelect={openAthlete} onStory={openStory} savedStoryProgress={savedStoryProgress} onContinueSavedStory={continueSavedStory} onRestartSavedStory={() => clearStoryProgress()} />}
+        {screen === "home" && <HomeScreen onSelect={openAthlete} onStory={openStory} onStoryExperience={openStoryExperience} onAskAI={openFeaturedStoryGuide} savedStoryProgress={savedStoryProgress} onContinueSavedStory={continueSavedStory} onRestartSavedStory={() => clearStoryProgress()} />}
         {screen === "athlete" && athlete && (
           <AthleteScreen athlete={athlete} onBack={goHome} onTwin={openTwin} onStory={openStory} timelineReturnContext={timelineReturnContext} onClearTimelineContext={() => setTimelineReturnContext(null)} />
         )}
         {screen === "story" && athlete && moment && (
           <StoryView athlete={athlete} moment={moment} momentIndex={momentIndex} onBack={backToAthlete} onHome={goHome} onTwin={openTwin} onPersistProgress={persistStoryProgress} onRestartProgress={clearStoryProgress} initialVideoTime={savedStoryProgress?.athleteId === athlete.id && savedStoryProgress?.chapterNumber === (momentIndex + 1) ? savedStoryProgress.videoTime : 0} twinOpen={twinOpen} />
+        )}
+        {screen === "story-experience" && (
+          <StoryExperiencePage slug={storySlugFromPath()} onHome={goHome} />
         )}
         {twinOpen && athlete && (
           <ErrorBoundary scopeLabel="AI companion" resetKeys={[athlete?.id, moment?.title, twinMode]}>
@@ -1035,10 +1087,10 @@ function NotFoundScreen({ onHome }) {
   );
 }
 
-function HomeScreen({ onSelect, onStory, savedStoryProgress, onContinueSavedStory, onRestartSavedStory }) {
+function HomeScreen({ onSelect, onStory, onStoryExperience, onAskAI, savedStoryProgress, onContinueSavedStory, onRestartSavedStory }) {
   const featuredAthlete = getFeaturedAthlete();
   const featuredMoment = getFeaturedMoment();
-  const proof = sourceDetailsFor(featuredMoment);
+  const openFeaturedExperience = () => onStoryExperience(michaelJordanLastShotStory.slug);
   const [heroLoading, setHeroLoading] = useState(true);
   useEffect(() => {
     const id = window.setTimeout(() => setHeroLoading(false), 260);
@@ -1057,75 +1109,50 @@ function HomeScreen({ onSelect, onStory, savedStoryProgress, onContinueSavedStor
         </div>
       </nav>
 
-      {/* Hero */}
-      <div className="home-hero" style={{ padding: "58px 40px 48px", display: "grid", gridTemplateColumns: "1.05fr 0.95fr", gap: 36, alignItems: "center", minHeight: "calc(100dvh - 92px)" }}>
-        {heroLoading ? (
-          <div style={{ gridColumn: "1 / -1", width: "100%" }}>
-            <LoadingState label="Loading featured story" message="Preparing the verified opening chapter." />
-          </div>
-        ) : (
-          <>
-        <div style={{ position: "relative", zIndex: 1 }}>
-          <div className="mono" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 11px", border: "1px solid rgba(123,200,232,0.28)", color: "#7BC8E8", fontSize: 9, letterSpacing: 2, marginBottom: 26 }}>
-            ✓ VERIFIED FEATURED STORY · {proof.level}
-          </div>
-          <div className="bebas gold-text gold-shimmer home-headline-mobile-fit" style={{ fontSize: "clamp(58px,11vw,132px)", letterSpacing: 9, lineHeight: 0.86, marginBottom: 22, display: "block" }}>
-            {featuredAthlete.name}
-          </div>
-          <div className="cormorant" style={{ fontSize: "clamp(23px,3vw,38px)", color: "#F0EBE3", lineHeight: 1.25, maxWidth: 720, marginBottom: 22 }}>
-            {featuredMoment.title}
-          </div>
-          <div style={{ fontSize: 15, color: "rgba(240,235,227,0.55)", maxWidth: 680, lineHeight: 1.75, marginBottom: 30 }}>
-            {featuredMoment.body}
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-            <button aria-label={`Start story for ${featuredMoment.title}`} className="cta-glow" onClick={() => onStory(featuredAthlete, featuredMoment, FEATURED.momentIndex)}
-              style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "14px 22px", background: "linear-gradient(135deg,#C9A84C,#FFD87A)", color: "#080808", border: "none", cursor: "pointer", borderRadius: 2 }}>
-              ▶ START STORY
-            </button>
-            <button className="story-card-btn" onClick={() => onSelect(featuredAthlete)}
-              style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "14px 22px", background: "rgba(255,255,255,0.02)", color: "#C9A84C", border: "1px solid rgba(201,168,76,0.32)", cursor: "pointer", borderRadius: 2 }}>
-              OPEN TIMELINE
-            </button>
-            {savedStoryProgress?.athleteId && (
-              <>
-                <button className="story-card-btn" onClick={onContinueSavedStory}
-                  style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "14px 22px", background: "rgba(123,200,232,0.08)", color: "#7BC8E8", border: "1px solid rgba(123,200,232,0.36)", cursor: "pointer", borderRadius: 2 }}>
-                  CONTINUE WHERE YOU LEFT OFF
-                </button>
-                <button className="story-card-btn" onClick={onRestartSavedStory}
-                  style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "14px 22px", background: "rgba(255,255,255,0.02)", color: "#777", border: "1px solid rgba(255,255,255,0.16)", cursor: "pointer", borderRadius: 2 }}>
-                  RESTART SAVED STORY
-                </button>
-              </>
-            )}
-          </div>
+      {heroLoading ? (
+        <div className="home-hero" style={{ padding: "58px 40px 48px", minHeight: "calc(100dvh - 92px)", display: "grid", alignItems: "center" }}>
+          <LoadingState label="Loading featured story" message="Preparing the verified opening chapter." />
         </div>
-        <div className="story-panel" style={{ position: "relative", minHeight: 430, padding: 30, overflow: "hidden" }}>
-          <div className="hero-field bebas" style={{ position: "absolute", inset: "auto -26px -54px auto", fontSize: 260, letterSpacing: 8, color: "rgba(201,168,76,0.055)", lineHeight: 0.8 }}>
-            {featuredAthlete.initials}
-          </div>
-          <div style={{ position: "relative", zIndex: 1 }}>
-            <div className="mono" style={{ fontSize: 9, color: "#7BC8E8", letterSpacing: 3, marginBottom: 20 }}>CINEMATIC STORY ENGINE</div>
-            <div className="compact-grid" style={{ marginBottom: 26 }}>
-              {featuredAthlete.stats.map((s) => (
-                <div key={s.l} style={{ padding: 18, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.04)" }}>
-                  <div className="bebas" style={{ fontSize: 34, color: "#C9A84C", letterSpacing: 2 }}>{s.v}</div>
-                  <div className="mono" style={{ fontSize: 8, color: "#555", letterSpacing: 2 }}>{s.l}</div>
-                </div>
-              ))}
-            </div>
-            <div className="cormorant" style={{ fontSize: 20, lineHeight: 1.7, color: "rgba(240,235,227,0.72)", marginBottom: 20 }}>
-              "{featuredAthlete.tagline}"
-            </div>
-            <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#555", lineHeight: 1.8 }}>
-              TRUST → STORY → TWIN → COLLECTIBLE
-            </div>
-          </div>
+      ) : (
+        <FeaturedStoryHero
+          story={michaelJordanLastShotStory}
+          onWatch={openFeaturedExperience}
+          onTimeline={() => onSelect(featuredAthlete)}
+          onAskAI={onAskAI}
+        />
+      )}
+
+      <ExperienceModeSection
+        onWatch={openFeaturedExperience}
+        onExplore={() => onSelect(featuredAthlete)}
+        onAsk={onAskAI}
+      />
+
+      <FeaturedTimelinePreview
+        story={michaelJordanLastShotStory}
+        onViewMoment={openFeaturedExperience}
+      />
+
+      <AIPromptDemo />
+
+      <StoryLibraryPreview
+        onSelect={openFeaturedExperience}
+      />
+
+      <VerificationSection />
+
+      {savedStoryProgress?.athleteId && (
+        <div style={{ padding: "18px 40px 0", display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <button className="story-card-btn" onClick={onContinueSavedStory}
+            style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "14px 22px", background: "rgba(123,200,232,0.08)", color: "#7BC8E8", border: "1px solid rgba(123,200,232,0.36)", cursor: "pointer", borderRadius: 2 }}>
+            CONTINUE WHERE YOU LEFT OFF
+          </button>
+          <button className="story-card-btn" onClick={onRestartSavedStory}
+            style={{ fontFamily: '"Inter"', fontSize: 10, letterSpacing: 2, padding: "14px 22px", background: "rgba(255,255,255,0.02)", color: "#8f8f8f", border: "1px solid rgba(255,255,255,0.16)", cursor: "pointer", borderRadius: 2 }}>
+            RESTART SAVED STORY
+          </button>
         </div>
-          </>
-        )}
-      </div>
+      )}
 
       {/* Divider */}
       <div style={{ margin: "0 40px 40px", height: 1, background: "linear-gradient(to right,transparent,rgba(201,168,76,0.3),transparent)" }} />
