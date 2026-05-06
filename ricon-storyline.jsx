@@ -17,6 +17,7 @@ const CSS = `
   @keyframes slowDrift { 0%,100%{transform:translate3d(0,0,0) scale(1);} 50%{transform:translate3d(-18px,10px,0) scale(1.04);} }
   @keyframes videoPulse { 0%,100%{opacity:0.45;transform:scaleX(0.82);} 50%{opacity:1;transform:scaleX(1);} }
   @keyframes hotspotPulse { 0%,100%{box-shadow:0 0 0 0 rgba(123,200,232,0.2);} 50%{box-shadow:0 0 0 9px rgba(123,200,232,0);} }
+  @keyframes voiceBar { 0%,100%{height:8px;opacity:0.35;} 50%{height:28px;opacity:1;} }
   .ricon-root { background:#080808; min-height:100vh; color:#F0EBE3; font-family:"DM Sans",sans-serif; overflow-x:hidden; }
   button { font: inherit; }
   .bebas { font-family:"Bebas Neue",sans-serif; }
@@ -46,7 +47,17 @@ const CSS = `
   .interactive-video { position:relative; overflow:hidden; min-height:320px; background:#090909; border:1px solid rgba(255,255,255,0.08); }
   .interactive-video:before { content:""; position:absolute; inset:-20%; background:radial-gradient(circle at 35% 28%,rgba(123,200,232,0.18),transparent 26%),radial-gradient(circle at 68% 62%,rgba(201,168,76,0.22),transparent 30%),linear-gradient(135deg,rgba(255,255,255,0.06),transparent 44%); animation:slowDrift 11s ease-in-out infinite; }
   .interactive-video:after { content:""; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(8,8,8,0.08),rgba(8,8,8,0.54)),repeating-linear-gradient(to bottom,rgba(255,255,255,0.035) 0,rgba(255,255,255,0.035) 1px,transparent 1px,transparent 7px); pointer-events:none; }
+  .timeline-video { position:relative; overflow:hidden; width:min(520px,100%); min-height:154px; margin:18px 0 16px; border:1px solid rgba(255,255,255,0.08); background:#090909; cursor:pointer; }
+  .timeline-video:before { content:""; position:absolute; inset:-30%; background:radial-gradient(circle at 24% 30%,rgba(123,200,232,0.18),transparent 24%),radial-gradient(circle at 74% 68%,rgba(201,168,76,0.22),transparent 30%),linear-gradient(135deg,rgba(255,255,255,0.06),transparent 45%); animation:slowDrift 12s ease-in-out infinite; }
+  .timeline-video:after { content:""; position:absolute; inset:0; background:linear-gradient(to bottom,rgba(0,0,0,0.08),rgba(0,0,0,0.62)),repeating-linear-gradient(to bottom,rgba(255,255,255,0.035) 0,rgba(255,255,255,0.035) 1px,transparent 1px,transparent 8px); pointer-events:none; }
   .hotspot { animation:hotspotPulse 2.4s ease-in-out infinite; }
+  .voice-panel { border:1px solid rgba(201,168,76,0.18); background:rgba(201,168,76,0.045); padding:12px 14px; margin-top:14px; display:flex; align-items:center; justify-content:space-between; gap:14px; }
+  .voice-bars { display:flex; align-items:center; gap:4px; height:32px; }
+  .voice-bars span { width:4px; min-height:8px; background:#C9A84C; opacity:0.45; animation:voiceBar 1.1s ease-in-out infinite; }
+  .voice-bars span:nth-child(2) { animation-delay:0.1s; background:#FFD87A; }
+  .voice-bars span:nth-child(3) { animation-delay:0.2s; background:#7BC8E8; }
+  .voice-bars span:nth-child(4) { animation-delay:0.3s; }
+  .voice-bars span:nth-child(5) { animation-delay:0.4s; background:#FFD87A; }
   .proof-btn:hover, .story-card-btn:hover { border-color:rgba(201,168,76,0.65) !important; color:#FFD87A !important; background:rgba(201,168,76,0.08) !important; }
   .compact-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:2px; }
   @media (max-width: 760px) {
@@ -59,6 +70,23 @@ const CSS = `
     .timeline-line { display:none !important; }
     .timeline-row { gap:12px !important; }
     .timeline-year { width:64px !important; }
+    .timeline-video { min-height:178px !important; }
+    .twin-modal { overflow-y:auto !important; backdrop-filter:none !important; }
+    .twin-header { padding:18px 18px !important; align-items:flex-start !important; gap:14px !important; flex-wrap:wrap !important; }
+    .twin-title { width:100% !important; }
+    .twin-title .bebas { font-size:34px !important; line-height:1.1 !important; }
+    .twin-mode-toggle { order:2 !important; flex:1 1 auto !important; min-width:0 !important; }
+    .twin-mode-toggle button { flex:1 !important; padding:12px 10px !important; }
+    .twin-close { order:3 !important; flex:0 0 auto !important; padding:12px 14px !important; }
+    .twin-chat { padding:42px 20px 28px !important; overflow:visible !important; }
+    .twin-empty { padding-top:28px !important; }
+    .twin-prompt-row { flex-direction:column !important; align-items:stretch !important; }
+    .twin-prompt-row button { width:100% !important; padding:13px 14px !important; line-height:1.5 !important; }
+    .twin-input-bar { padding:16px 18px 20px !important; position:sticky !important; bottom:0 !important; background:rgba(4,4,4,0.96) !important; }
+    .twin-input-row { flex-direction:column !important; }
+    .twin-input-row input, .twin-input-row button { width:100% !important; min-height:54px !important; }
+    .twin-message-user { max-width:86% !important; }
+    .voice-panel { align-items:flex-start !important; flex-direction:column !important; }
   }
 `;
 
@@ -544,6 +572,7 @@ function TimelineMoment({ athlete, moment, index, total, onStory, onSource }) {
             {moment.title}
           </button>
           <div className="cormorant" style={{ fontStyle: "italic", fontSize: 17, color: "rgba(240,235,227,0.62)", lineHeight: 1.75, marginBottom: 14, maxWidth: 660 }}>{moment.body}</div>
+          <TimelineVideoPreview athlete={athlete} moment={moment} index={index} onPlay={onStory} onSource={onSource} />
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ width: 8, height: 1, background: "#333" }} />
             <button onClick={onSource} className="proof-btn mono" style={{ fontSize: 9, color: "#5d5d5d", letterSpacing: 1, background: "transparent", border: "1px solid rgba(255,255,255,0.06)", padding: "6px 9px", cursor: "pointer", borderRadius: 2 }}>✓ {moment.src}</button>
@@ -552,6 +581,45 @@ function TimelineMoment({ athlete, moment, index, total, onStory, onSource }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function TimelineVideoPreview({ athlete, moment, index, onPlay, onSource }) {
+  const cfg = TYPE_CONFIG[moment.type] || TYPE_CONFIG.iconic;
+  const collectible = collectibleFor(athlete, moment, index);
+  const progress = 28 + ((index * 17) % 56);
+
+  return (
+    <button className="timeline-video" onClick={onPlay} aria-label={`Open video preview for ${moment.title}`}>
+      <div style={{ position: "relative", zIndex: 1, minHeight: "inherit", padding: 18, display: "flex", flexDirection: "column", justifyContent: "space-between", textAlign: "left" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
+          <div>
+            <div className="mono" style={{ fontSize: 8, letterSpacing: 3, color: "#7BC8E8", marginBottom: 8 }}>VIDEO PREVIEW</div>
+            <div className="bebas" style={{ fontSize: 30, letterSpacing: 3, color: "#F0EBE3", lineHeight: 1 }}>{athlete.initials}</div>
+          </div>
+          <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: cfg.color, border: `1px solid ${cfg.color}55`, padding: "5px 8px" }}>{cfg.label}</div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={{ width: 52, height: 52, borderRadius: "50%", border: "1px solid rgba(201,168,76,0.5)", color: "#C9A84C", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.48)", boxShadow: "0 0 24px rgba(201,168,76,0.14)" }}>
+            <span className="bebas" style={{ fontSize: 22, transform: "translateX(1px)" }}>▶</span>
+          </span>
+          <div style={{ flex: 1 }}>
+            <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#777", marginBottom: 8 }}>{moment.y} · MUTED LOOP · TAP TO EXPAND</div>
+            <div style={{ height: 3, background: "rgba(255,255,255,0.12)" }}>
+              <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg,#7BC8E8,#C9A84C,#FFD87A)" }} />
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", position: "relative", zIndex: 2 }}>
+          <span className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#7BC8E8", border: "1px solid rgba(123,200,232,0.24)", padding: "5px 8px" }}>CAPTIONS</span>
+          <span className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#C9A84C", border: "1px solid rgba(201,168,76,0.24)", padding: "5px 8px" }}>PROOF HOTSPOT</span>
+          {collectible && <span className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#FFD87A", border: "1px solid rgba(255,216,122,0.22)", padding: "5px 8px" }}>OWNABLE</span>}
+        </div>
+      </div>
+      <span onClick={(e) => { e.stopPropagation(); onSource(); }} className="hotspot" style={{ position: "absolute", right: 18, bottom: 18, zIndex: 3, width: 12, height: 12, borderRadius: "50%", background: "#7BC8E8", border: "1px solid #7BC8E8" }} />
+    </button>
   );
 }
 
@@ -757,18 +825,78 @@ function SourceField({ label, value }) {
   );
 }
 
+function VoiceSynthesisPanel({ active, status, onPlay, onStop, mode }) {
+  return (
+    <div className="voice-panel">
+      <div>
+        <div className="mono" style={{ fontSize: 8, color: "#7BC8E8", letterSpacing: 2, marginBottom: 5 }}>
+          {mode === "narrator" ? "NARRATOR VOICE SYNTHESIS" : "AI VOICE RESPONSE"}
+        </div>
+        <div className="mono" style={{ fontSize: 8, color: "#555", letterSpacing: 1 }}>{status}</div>
+      </div>
+      <div className="voice-bars" aria-hidden="true">
+        {[0,1,2,3,4].map(i => <span key={i} style={{ animationPlayState: active ? "running" : "paused" }} />)}
+      </div>
+      <button className="proof-btn mono" onClick={active ? onStop : onPlay}
+        style={{ fontSize: 8, letterSpacing: 2, padding: "8px 10px", color: "#C9A84C", background: "transparent", border: "1px solid rgba(201,168,76,0.25)", cursor: "pointer", whiteSpace: "nowrap" }}>
+        {active ? "STOP VISUAL" : "SHOW VOICE"}
+      </button>
+    </div>
+  );
+}
+
 // ─── TWIN MODAL ───────────────────────────────────────────────────────────────
 function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState("ready");
+  const [speakingIndex, setSpeakingIndex] = useState(null);
   const apiHistory = useRef([]);
   const bottomRef = useRef(null);
   const modeRef = useRef(null);
+  const recognitionRef = useRef(null);
   const prompts = suggestedPromptsFor(athlete, moment);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+
+  useEffect(() => () => {
+    recognitionRef.current?.stop?.();
+  }, []);
+
+  const showVoice = (index = "latest") => {
+    setSpeakingIndex(index);
+    setVoiceStatus("Voice synthesis visual only. Audio muted for demo quality.");
+  };
+
+  const stopVoiceVisual = () => {
+    setSpeakingIndex(null);
+    setVoiceStatus("Voice visual stopped");
+  };
+
+  const startVoiceInput = () => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+      setVoiceStatus("Voice input is unavailable in this browser.");
+      return;
+    }
+    const recognition = new Recognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    recognition.onstart = () => { setIsListening(true); setVoiceStatus("Listening for your question"); };
+    recognition.onresult = (event) => {
+      const transcript = event.results?.[0]?.[0]?.transcript || "";
+      setInput(transcript);
+      setVoiceStatus(transcript ? "Voice captured. Send when ready." : "No voice captured.");
+    };
+    recognition.onerror = () => setVoiceStatus("Voice input failed or permission was denied.");
+    recognition.onend = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
 
   const fetchTwin = async (history) => {
     const res = await fetch("/api/twin", {
@@ -789,6 +917,7 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
       const reply = await fetchTwin(apiHistory.current);
       apiHistory.current.push({ role: "assistant", content: reply });
       setMessages([{ role: "assistant", content: reply }]);
+      showVoice(0);
     } catch { setError("Unable to reach the Digital Twin. Please try again."); }
     setLoading(false);
   };
@@ -801,6 +930,7 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
       const reply = await fetchTwin(apiHistory.current);
       apiHistory.current.push({ role: "assistant", content: reply });
       setMessages(p => [...p, { role: "assistant", content: reply }]);
+      showVoice(apiHistory.current.length);
     } catch { setError("Unable to reach the Digital Twin. Please try again."); }
     setLoading(false);
   };
@@ -817,6 +947,7 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
       const assistantMsg = { role: "assistant", content: reply };
       apiHistory.current.push(assistantMsg);
       setMessages(p => [...p, assistantMsg]);
+      showVoice(apiHistory.current.length);
     } catch { setError("Unable to reach the Digital Twin. Please try again."); }
     setLoading(false);
   };
@@ -837,19 +968,19 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
   }, []);
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(4,4,4,0.97)", backdropFilter: "blur(24px)", display: "flex", flexDirection: "column", animation: "fadeIn 0.35s ease" }}>
+    <div className="twin-modal" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(4,4,4,0.97)", backdropFilter: "blur(24px)", display: "flex", flexDirection: "column", animation: "fadeIn 0.35s ease" }}>
       <div className="scanline-fx" />
 
       {/* Header */}
-      <div style={{ padding: "22px 36px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 20, flexShrink: 0 }}>
-        <div>
+      <div className="twin-header" style={{ padding: "22px 36px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 20, flexShrink: 0 }}>
+        <div className="twin-title">
           <div className="mono" style={{ fontSize: 9, letterSpacing: 3, color: "#7BC8E8", marginBottom: 4 }}>◉ DIGITAL TWIN · VERIFIED RICON RECORD</div>
           <div className="bebas" style={{ fontSize: 26, letterSpacing: 4, color: "#F0EBE3" }}>{athlete.name}</div>
           {moment && <div className="mono" style={{ fontSize: 8, letterSpacing: 1, color: "#444", marginTop: 5 }}>CONTEXT · {moment.y} · {moment.title}</div>}
         </div>
         <div style={{ flex: 1 }} />
         {/* Mode toggle */}
-        <div style={{ display: "flex", gap: 2, background: "#111", padding: 2, borderRadius: 3 }}>
+        <div className="twin-mode-toggle" style={{ display: "flex", gap: 2, background: "#111", padding: 2, borderRadius: 3 }}>
           {["narrator","qa"].map(m => (
             <button key={m} onClick={() => switchMode(m)}
               className={mode === m ? "mode-btn-active" : ""}
@@ -858,7 +989,7 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
             </button>
           ))}
         </div>
-        <button onClick={onClose}
+        <button className="twin-close" onClick={onClose}
           style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, color: "#444", background: "none", border: "1px solid #1e1e1e", padding: "8px 14px", cursor: "pointer", borderRadius: 2, transition: "color 0.2s" }}
           onMouseEnter={e => e.target.style.color="#888"} onMouseLeave={e => e.target.style.color="#444"}>
           CLOSE ✕
@@ -881,7 +1012,7 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
           {/* Status */}
           <div style={{ textAlign: "center" }}>
             <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: loading ? "#7BC8E8" : "#C9A84C", marginBottom: 6 }}>
-              {loading ? "◉ SPEAKING..." : "● READY"}
+              {loading ? "◉ THINKING..." : isListening ? "◉ LISTENING..." : speakingIndex !== null ? "◉ VOICE ON" : "● READY"}
             </div>
             <div className="mono" style={{ fontSize: 8, letterSpacing: 1, color: "#2a2a2a" }}>VERIFIED TWIN v1.0</div>
           </div>
@@ -898,16 +1029,16 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
 
         {/* Chat area */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ flex: 1, overflowY: "auto", padding: "36px 40px" }}>
+          <div className="twin-chat" style={{ flex: 1, overflowY: "auto", padding: "36px 40px" }}>
             {messages.length === 0 && !loading && !error && (
-              <div style={{ textAlign: "center", paddingTop: 80 }}>
+              <div className="twin-empty" style={{ textAlign: "center", paddingTop: 80 }}>
                 <div className="cormorant" style={{ fontStyle: "italic", fontSize: 22, color: "rgba(240,235,227,0.18)", marginBottom: 12 }}>
                   {mode === "narrator" ? "Preparing the story..." : "Ask anything."}
                 </div>
                 {mode === "qa" && (
                   <>
                     <div className="mono" style={{ fontSize: 9, letterSpacing: 2, color: "#2a2a2a", marginBottom: 22 }}>THE TWIN RESPONDS ONLY WITH VERIFIED FACTS.</div>
-                    <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
+                    <div className="twin-prompt-row" style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
                       {prompts.map((p) => (
                         <button key={p} className="proof-btn mono" onClick={() => sendQA(p)} style={{ fontSize: 9, letterSpacing: 1, padding: "9px 12px", color: "#C9A84C", background: "transparent", border: "1px solid rgba(201,168,76,0.22)", cursor: "pointer" }}>{p}</button>
                       ))}
@@ -921,7 +1052,7 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
               <div key={i} style={{ marginBottom: 30, animation: "fadeUp 0.5s ease" }}>
                 {msg.role === "user" ? (
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <div style={{ maxWidth: "58%", padding: "14px 18px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 2 }}>
+                    <div className="twin-message-user" style={{ maxWidth: "58%", padding: "14px 18px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 2 }}>
                       <div style={{ fontSize: 14, color: "rgba(240,235,227,0.65)", lineHeight: 1.65 }}>{msg.content}</div>
                     </div>
                   </div>
@@ -933,6 +1064,13 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
                     <div style={{ flex: 1, paddingTop: 2 }}>
                       <div className="cormorant" style={{ fontStyle: "italic", fontSize: 19, color: "#F0EBE3", lineHeight: 1.75 }}>{msg.content}</div>
                       <div className="mono" style={{ fontSize: 8, letterSpacing: 2, color: "#2e2e2e", marginTop: 10 }}>✓ BASED ON VERIFIED RICON RECORD · SOURCES USED: {athlete.moments.length}</div>
+                      <VoiceSynthesisPanel
+                        active={speakingIndex === i || speakingIndex === "latest"}
+                        status={voiceStatus}
+                        onPlay={() => showVoice(i)}
+                        onStop={stopVoiceVisual}
+                        mode={mode}
+                      />
                     </div>
                   </div>
                 )}
@@ -961,13 +1099,15 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
 
           {/* Input / Controls */}
           {mode === "qa" ? (
-            <div style={{ padding: "18px 36px 20px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                {prompts.map((p) => (
-                  <button key={p} className="proof-btn mono" onClick={() => sendQA(p)} disabled={loading} style={{ fontSize: 8, letterSpacing: 1, padding: "7px 9px", color: "#777", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", cursor: loading ? "not-allowed" : "pointer" }}>{p}</button>
-                ))}
+            <div className="twin-input-bar" style={{ padding: "18px 36px 20px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+              <div className="mono" style={{ fontSize: 8, color: isListening ? "#7BC8E8" : "#555", letterSpacing: 2, marginBottom: 10 }}>
+                {isListening ? "MICROPHONE ACTIVE · SPEAK YOUR QUESTION" : voiceStatus}
               </div>
-              <div style={{ display: "flex", gap: 10 }}>
+              <div className="twin-input-row" style={{ display: "flex", gap: 10 }}>
+                <button onClick={isListening ? () => recognitionRef.current?.stop?.() : startVoiceInput} disabled={loading}
+                  style={{ fontFamily: '"Space Mono"', fontSize: 10, letterSpacing: 2, padding: "13px 16px", background: isListening ? "rgba(123,200,232,0.16)" : "transparent", color: isListening ? "#7BC8E8" : "#C9A84C", border: "1px solid rgba(201,168,76,0.28)", borderRadius: 2, cursor: loading ? "not-allowed" : "pointer", transition: "all 0.2s" }}>
+                  {isListening ? "STOP MIC" : "ASK BY VOICE"}
+                </button>
                 <input className="twin-input" value={input} onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendQA())}
                 placeholder={`Ask ${athlete.name.split(" ")[0]} anything...`}
@@ -982,6 +1122,17 @@ function TwinModal({ athlete, moment, mode, onClose, onSwitchMode }) {
           ) : (
             messages.length > 0 && !loading && (
               <div style={{ padding: "20px 36px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+                <div className="voice-panel" style={{ flexBasis: "100%", maxWidth: 540 }}>
+                  <div>
+                    <div className="mono" style={{ fontSize: 8, color: "#7BC8E8", letterSpacing: 2, marginBottom: 5 }}>VOICE SYNTHESIS</div>
+                    <div className="mono" style={{ fontSize: 8, color: "#555", letterSpacing: 1 }}>{voiceStatus}</div>
+                  </div>
+                  <div className="voice-bars" aria-hidden="true">{[0,1,2,3,4].map(i => <span key={i} style={{ animationPlayState: speakingIndex !== null ? "running" : "paused" }} />)}</div>
+                  <button className="proof-btn mono" onClick={speakingIndex !== null ? stopVoiceVisual : () => showVoice("latest")}
+                    style={{ fontSize: 8, letterSpacing: 2, padding: "8px 10px", color: "#C9A84C", background: "transparent", border: "1px solid rgba(201,168,76,0.25)", cursor: "pointer" }}>
+                    {speakingIndex !== null ? "STOP VISUAL" : "SHOW VOICE"}
+                  </button>
+                </div>
                 <button className="twin-btn" onClick={continueNarrator}
                   style={{ fontFamily: '"Space Mono"', fontSize: 9, letterSpacing: 2, padding: "11px 22px", background: "transparent", color: "#7BC8E8", border: "1px solid rgba(123,200,232,0.3)", cursor: "pointer", borderRadius: 2, transition: "all 0.25s" }}>
                   ▶ CONTINUE THE STORY
