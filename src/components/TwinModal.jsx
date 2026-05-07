@@ -105,11 +105,10 @@ const qaCaptureMessages = (athlete) => [
   { role: "assistant", content: answerQuestion(athlete, "I love you.") },
 ];
 
-const voiceDemoPrompt = "Tell me about your most defining moment.";
 const voicePrompts = [
-  { icon: "▣", label: "Relive a defining moment" },
-  { icon: "◌", label: "Ask about the mindset" },
-  { icon: "◇", label: "Explain the legacy" },
+  { icon: "▣", label: "Relive a defining moment", prompt: "What was your defining moment?" },
+  { icon: "◌", label: "Ask about the mindset", prompt: "What mindset separated you from everyone else?" },
+  { icon: "◇", label: "Explain the legacy", prompt: "How should people understand your legacy?" },
 ];
 
 export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
@@ -120,6 +119,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
   const [voiceState, setVoiceState] = useState("idle");
   const narratorIndex = useRef(0);
   const voiceTimer = useRef(null);
+  const recognitionRef = useRef(null);
+  const inputRef = useRef(null);
   const bottomRef = useRef(null);
   const modeRef = useRef(null);
   const figmaTwinMode = new URLSearchParams(window.location.search).get("figmaTwin");
@@ -129,6 +130,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
   useEffect(() => {
     return () => {
       if (voiceTimer.current) window.clearTimeout(voiceTimer.current);
+      recognitionRef.current?.abort?.();
       window.speechSynthesis?.cancel();
     };
   }, []);
@@ -190,10 +192,10 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
     setLoading(false);
   };
 
-  const sendQA = async () => {
-    if (!input.trim() || loading) return;
-    const userMsg = { role: "user", content: input };
-    const question = input;
+  const sendQA = async (questionOverride, speakResponse = false) => {
+    const question = (questionOverride ?? input).trim();
+    if (!question || loading) return;
+    const userMsg = { role: "user", content: question };
     setMessages(p => [...p, userMsg]);
     setInput("");
     setLoading(true);
@@ -201,9 +203,16 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
     const reply = answerQuestion(athlete, question);
     setMessages(p => [...p, { role: "assistant", content: reply }]);
     setLoading(false);
+    if (speakResponse) speakReply(reply);
+    else setVoiceState("idle");
   };
 
-  const startVoiceInteraction = async () => {
+  const sendSuggestedPrompt = (prompt) => {
+    setVoiceState("idle");
+    sendQA(prompt);
+  };
+
+  const startVoiceInteraction = () => {
     if (loading || voiceState === "listening" || voiceState === "thinking") return;
 
     if (voiceState === "speaking") {
@@ -212,24 +221,61 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
       return;
     }
 
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     setVoiceState("listening");
     if (voiceTimer.current) window.clearTimeout(voiceTimer.current);
 
-    voiceTimer.current = window.setTimeout(async () => {
-      const userMsg = { role: "user", content: voiceDemoPrompt };
-      setMessages(p => [...p, userMsg]);
+    if (!SpeechRecognition) {
+      inputRef.current?.focus();
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    let finalTranscript = "";
+    recognition.onresult = (event) => {
+      let interimTranscript = "";
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalTranscript += transcript;
+        else interimTranscript += transcript;
+      }
+      setInput((finalTranscript || interimTranscript).trim());
+    };
+    recognition.onerror = () => {
+      setVoiceState("idle");
+      inputRef.current?.focus();
+    };
+    recognition.onend = () => {
+      const question = finalTranscript.trim();
+      recognitionRef.current = null;
+      if (!question) {
+        setVoiceState("idle");
+        return;
+      }
       setVoiceState("thinking");
-      setLoading(true);
-      await wait(650);
-      const reply = answerQuestion(athlete, voiceDemoPrompt);
-      setMessages(p => [...p, { role: "assistant", content: reply }]);
-      setLoading(false);
-      speakReply(reply);
-    }, 900);
+      sendQA(question, true);
+    };
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+      setVoiceState("idle");
+      inputRef.current?.focus();
+    }
   };
 
   const stopVoiceInteraction = () => {
     if (voiceTimer.current) window.clearTimeout(voiceTimer.current);
+    if (recognitionRef.current) {
+      recognitionRef.current.onend = null;
+      recognitionRef.current.abort?.();
+    }
+    recognitionRef.current = null;
     window.speechSynthesis?.cancel();
     setVoiceState("idle");
     setLoading(false);
@@ -260,7 +306,6 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
     if (mode === "narrator") triggerNarrator();
   }, []);
 
-  const showVoiceSurface = mode === "qa" && (messages.length === 0 || voiceState !== "idle");
   const voiceIsActive = voiceState === "listening" || voiceState === "thinking" || voiceState === "speaking";
 
   return (
@@ -311,48 +356,34 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
         </div>
 
         <div className="modal-main">
-          {showVoiceSurface ? (
-            <div className={`voice-mode-surface ${voiceIsActive ? "active" : ""}`}>
-              <div className="voice-mode-title">
-                <span>{athlete.name.split(" ")[0]}</span> Voice
-              </div>
-              <div className="voice-live-status">
-                <span className={voiceIsActive ? "live-dot active" : "live-dot"} />
-                {voiceState === "idle" && "Ready"}
-                {voiceState === "listening" && "Listening"}
-                {voiceState === "thinking" && "Thinking"}
-                {voiceState === "speaking" && "Speaking"}
-              </div>
-
-              {!voiceIsActive ? (
-                <div className="voice-prompts">
-                  <div className="voice-prompts-title">Ideas to get started</div>
-                  {voicePrompts.map(prompt => (
-                    <button key={prompt.label} className="voice-chip" onClick={startVoiceInteraction}>
-                      <span>{prompt.icon}</span>
-                      {prompt.label}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="voice-active-panel">
-                  <div className="voice-active-title">
-                    {voiceState === "listening" && "Go ahead. I am listening."}
-                    {voiceState === "thinking" && "Checking the verified record."}
-                    {voiceState === "speaking" && "Speaking as the verified twin."}
+          <div className="messages">
+              {messages.length === 0 && !loading && (
+                mode === "qa" ? (
+                  <div className="qa-empty-state">
+                    <div className="empty-title">Ask {athlete.name.split(" ")[0]} anything.</div>
+                    <div className="empty-meta">Verified twin Q&A · Voice optional</div>
+                    <div className="voice-prompts compact">
+                      {voicePrompts.map(prompt => (
+                        <button key={prompt.label} className="voice-chip" onClick={() => sendSuggestedPrompt(prompt.prompt)}>
+                          <span>{prompt.icon}</span>
+                          {prompt.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="voice-active-wave">
-                    {Array.from({ length: 18 }).map((_, i) => <span key={i} style={{ animationDelay: `${i * 0.045}s` }} />)}
+                ) : (
+                  <div className="empty-state">
+                    <div className="empty-title">Preparing the story...</div>
                   </div>
-                </div>
+                )
               )}
 
-            </div>
-          ) : (
-            <div className="messages">
-              {messages.length === 0 && !loading && (
-                <div className="empty-state">
-                  <div className="empty-title">Preparing the story...</div>
+              {mode === "qa" && voiceIsActive && (
+                <div className="voice-status-card">
+                  <span className={voiceIsActive ? "live-dot active" : "live-dot"} />
+                  {voiceState === "listening" && "Listening. Ask naturally."}
+                  {voiceState === "thinking" && "Checking verified records."}
+                  {voiceState === "speaking" && "Speaking response."}
                 </div>
               )}
 
@@ -411,13 +442,13 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
             )}
 
             <div ref={bottomRef} />
-            </div>
-          )}
+          </div>
 
           {mode === "qa" ? (
             <div className="modal-composer voice-dock">
               <div className="dock-input-wrap">
                 <input
+                  ref={inputRef}
                   className="twin-input"
                   value={input}
                   onChange={e => setInput(e.target.value)}
@@ -433,15 +464,10 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                 aria-label={voiceState === "speaking" ? "Stop voice playback" : "Start voice interaction"}
               >
                 <span>{voiceState === "speaking" ? "■" : "🎙"}</span>
-                {voiceState === "idle" && (
-                  <span className="voice-button-bars">
-                    {[0, 1, 2].map(i => <i key={i} style={{ animationDelay: `${i * 0.11}s` }} />)}
-                  </span>
-                )}
               </button>
               <button
                 className={voiceIsActive ? "send-icon-button stop-mode" : "send-icon-button"}
-                onClick={voiceIsActive ? stopVoiceInteraction : sendQA}
+                onClick={voiceIsActive ? stopVoiceInteraction : () => sendQA()}
                 disabled={!voiceIsActive && (loading || !input.trim())}
                 aria-label={voiceIsActive ? "Exit voice mode" : "Send message"}
               >
