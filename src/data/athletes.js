@@ -1,6 +1,6 @@
 export const ATHLETES = [
   {
-    id:"jordan", name:"Michael Jordan", initials:"MJ", years:"1984 – 2003", position:"SG",
+    id:"jordan", name:"Michael Jordan", initials:"MJ", headshot:"https://cdn.nba.com/headshots/nba/latest/1040x760/893.png", heroImage:"https://commons.wikimedia.org/wiki/Special:FilePath/Michael_Jordan_holds_up_his_Chicago_Bulls_jersey_on_September_12,_1984.jpg", years:"1984 – 2003", position:"SG",
     tagline:"The standard. The legend. The truth.",
     teams:"Chicago Bulls · Washington Wizards",
     stats:[{l:"PPG",v:"30.1"},{l:"Championships",v:"6"},{l:"Finals MVPs",v:"6"},{l:"Scoring Titles",v:"10"}],
@@ -16,7 +16,7 @@ export const ATHLETES = [
     ],
   },
   {
-    id:"shaq", name:"Shaquille O'Neal", initials:"SQ", years:"1992 – 2011", position:"C",
+    id:"shaq", name:"Shaquille O'Neal", initials:"SQ", headshot:"https://cdn.nba.com/headshots/nba/latest/1040x760/406.png", heroImage:"https://commons.wikimedia.org/wiki/Special:FilePath/Shaquille%20O%27Neal.JPG", years:"1992 – 2011", position:"C",
     tagline:"There has never been anything like this.",
     teams:"Magic · Lakers · Heat · Suns · Cavaliers · Celtics",
     stats:[{l:"PPG",v:"23.7"},{l:"Championships",v:"4"},{l:"Finals MVPs",v:"3"},{l:"All-Stars",v:"15"}],
@@ -30,7 +30,7 @@ export const ATHLETES = [
     ],
   },
   {
-    id:"bird", name:"Larry Bird", initials:"LB", years:"1979 – 1992", position:"SF",
+    id:"bird", name:"Larry Bird", initials:"LB", headshot:"https://www.basketball-reference.com/req/202106291/images/players/birdla01.jpg", years:"1979 – 1992", position:"SF",
     tagline:"He saw the game before it happened.",
     teams:"Boston Celtics",
     stats:[{l:"PPG",v:"24.3"},{l:"Championships",v:"3"},{l:"MVPs",v:"3"},{l:"All-Stars",v:"12"}],
@@ -44,7 +44,7 @@ export const ATHLETES = [
     ],
   },
   {
-    id:"wilt", name:"Wilt Chamberlain", initials:"WC", years:"1959 – 1973", position:"C",
+    id:"wilt", name:"Wilt Chamberlain", initials:"WC", headshot:"https://www.basketball-reference.com/req/202106291/images/players/chambwi01.jpg", heroImage:"https://commons.wikimedia.org/wiki/Special:FilePath/Wilt_Chamberlain.jpg", years:"1959 – 1973", position:"C",
     tagline:"The numbers are not statistics. They are mythology.",
     teams:"Warriors · 76ers · Lakers",
     stats:[{l:"PPG",v:"30.1"},{l:"RPG",v:"22.9"},{l:"Championships",v:"2"},{l:"50+ Pt Games",v:"118"}],
@@ -58,7 +58,7 @@ export const ATHLETES = [
     ],
   },
   {
-    id:"kidd", name:"Jason Kidd", initials:"JK", years:"1994 – 2013", position:"PG",
+    id:"kidd", name:"Jason Kidd", initials:"JK", headshot:"https://www.basketball-reference.com/req/202106291/images/players/kiddja01.jpg", years:"1994 – 2013", position:"PG",
     tagline:"He made everyone around him better.",
     teams:"Suns · Nets · Mavericks · Knicks",
     stats:[{l:"APG",v:"8.7"},{l:"Championships",v:"1"},{l:"All-Stars",v:"10"},{l:"Olympic Golds",v:"2"}],
@@ -71,7 +71,7 @@ export const ATHLETES = [
     ],
   },
   {
-    id:"barry", name:"Rick Barry", initials:"RB", years:"1965 – 1980", position:"SF",
+    id:"barry", name:"Rick Barry", initials:"RB", headshot:"https://www.basketball-reference.com/req/202106291/images/players/barryri01.jpg", years:"1965 – 1980", position:"SF",
     tagline:"The most complete scorer the game has ever seen.",
     teams:"Warriors · Oakland Oaks · NY Nets · Houston Rockets",
     stats:[{l:"PPG",v:"23.2"},{l:"Championships",v:"1"},{l:"FT%",v:"90%"},{l:"All-Stars",v:"12"}],
@@ -83,7 +83,7 @@ export const ATHLETES = [
     ],
   },
   {
-    id:"west_d", name:"David West", initials:"DW", years:"2003 – 2018", position:"PF",
+    id:"west_d", name:"David West", initials:"DW", headshot:"https://cdn.nba.com/headshots/nba/latest/1040x760/2561.png", years:"2003 – 2018", position:"PF",
     tagline:"He knew what mattered. He always knew.",
     teams:"Hornets · Pacers · Spurs · Warriors · Celtics",
     stats:[{l:"PPG",v:"12.9"},{l:"Championships",v:"1"},{l:"Seasons",v:"15"},{l:"All-Stars",v:"2"}],

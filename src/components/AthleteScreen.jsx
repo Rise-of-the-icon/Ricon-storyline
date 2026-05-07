@@ -19,6 +19,11 @@ export default function AthleteScreen({ athlete, onBack, onTwin }) {
         <div className="athlete-watermark">
           {athlete.initials}
         </div>
+        {(athlete.heroImage || athlete.headshot) && (
+          <div className={athlete.heroImage ? "athlete-portrait-wrap" : "athlete-portrait-wrap headshot-fallback"} aria-hidden="true">
+            <img className="athlete-portrait" src={athlete.heroImage || athlete.headshot} alt="" />
+          </div>
+        )}
         <div className="athlete-meta">
           {athlete.position} · {athlete.teams}
         </div>
