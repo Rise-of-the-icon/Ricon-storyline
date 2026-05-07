@@ -89,10 +89,14 @@ const CSS = `
   .card-root:hover .card-tagline { color: var(--card-foreground); }
   .card-root:hover .card-explore { opacity: 1; transform: translateY(0); }
   .card-root:hover .card-initials { opacity: 0.08; }
+  .card-root:hover .card-headshot-wrap { transform: translateY(-2px) scale(1.03); border-color: color-mix(in srgb, var(--premium) 52%, var(--border)); }
   .card-initials { position: absolute; top: -10px; right: -4px; font-size: 7rem; font-weight: 900; letter-spacing: 0; color: var(--primary); opacity: 0.05; line-height: 1; user-select: none; transition: opacity var(--motion-standard); }
-  .card-top { margin-bottom: auto; }
+  .card-headshot-wrap { position: absolute; top: 26px; right: 26px; z-index: 1; width: 76px; height: 76px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--premium) 34%, var(--border)); border-radius: 999px; background: radial-gradient(circle, color-mix(in srgb, var(--premium) 18%, var(--surface)), var(--card)); box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28), 0 0 0 7px rgba(201, 165, 77, 0.04); transition: transform var(--motion-standard) var(--ease-out), border-color var(--motion-standard); }
+  .card-headshot { width: 100%; height: 100%; object-fit: cover; object-position: center top; filter: saturate(0.96) contrast(1.08); }
+  .card-top, .card-title, .card-tagline, .card-explore { position: relative; z-index: 2; }
+  .card-top { margin-bottom: auto; padding-right: 82px; }
   .card-title { margin-top: 44px; margin-bottom: 10px; color: var(--card-foreground); font-size: clamp(1.55rem, 3.3vw, 2.25rem); font-weight: 850; line-height: 1.08; letter-spacing: 0; }
-  .card-tagline { color: var(--muted-foreground); font-size: 0.92rem; line-height: 1.6; margin-bottom: 18px; transition: color var(--motion-standard); }
+  .card-tagline { max-width: 78%; color: var(--muted-foreground); font-size: 0.92rem; line-height: 1.6; margin-bottom: 18px; transition: color var(--motion-standard); }
   .card-explore { display: flex; align-items: center; gap: 8px; color: var(--accent); font-family: var(--font-mono); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0; transform: translateY(8px); transition: all var(--motion-standard); }
 
   .ghost-button, .primary-button, .secondary-button, .close-button, .mode-button { border-radius: var(--radius-sm); border: 1px solid var(--border); min-height: 2.5rem; padding: 0.7rem 1rem; font-family: var(--font-mono); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast), opacity var(--motion-fast); }

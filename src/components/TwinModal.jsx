@@ -357,7 +357,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
 
         <div className="modal-main">
           <div className="messages">
-              {messages.length === 0 && !loading && (
+              {messages.length === 0 && !loading && !voiceIsActive && (
                 mode === "qa" ? (
                   <div className="qa-empty-state">
                     <div className="empty-title">Ask {athlete.name.split(" ")[0]} anything.</div>

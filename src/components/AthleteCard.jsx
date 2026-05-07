@@ -5,6 +5,11 @@ export default function AthleteCard({ athlete, delay, onClick }) {
       <div className="card-initials">
         {athlete.initials}
       </div>
+      {athlete.headshot && (
+        <div className="card-headshot-wrap" aria-hidden="true">
+          <img className="card-headshot" src={athlete.headshot} alt="" />
+        </div>
+      )}
       <div className="card-top">
         <div className="eyebrow-pill">
           {athlete.position} · {athlete.years}
