@@ -6,12 +6,18 @@ function FeaturedStoryCard({ legend, delay, onClick }) {
   const label = legend.cat === "music" ? legend.genreLabel : legend.leagueLabel;
 
   return (
-    <button className="featured-card" onClick={onClick} style={{ animation: `fadeUp 0.6s ease ${delay}ms both` }}>
+    <button
+      type="button"
+      className="featured-card"
+      onClick={onClick}
+      aria-label={`Explore ${legend.name} story`}
+      style={{ animation: `fadeUp 0.6s ease ${delay}ms both` }}
+    >
       <div className="featured-card-top">
         <span className={`eyebrow-pill ${legend.cat === "music" ? "eyebrow-music" : "eyebrow-sports"}`}>
           {label}
         </span>
-        <span className="featured-enter">ENTER →</span>
+        <span className="featured-enter" aria-hidden="true">ENTER →</span>
       </div>
       <div>
         <div className="featured-title">{legend.name}</div>
@@ -28,6 +34,8 @@ export default function HomeScreen({ onSelect }) {
   const [filter, setFilter] = useState("all");
 
   useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+
     const interval = window.setInterval(() => {
       setHeroVisible(false);
       window.setTimeout(() => {
@@ -47,7 +55,7 @@ export default function HomeScreen({ onSelect }) {
 
   return (
     <div className="animate-page-enter">
-      <nav className="app-nav">
+      <nav className="app-nav" aria-label="Primary">
         <span className="brand-mark">RICON</span>
         <div className="nav-divider" />
         <span className="brand-submark">Storyline</span>
@@ -55,33 +63,36 @@ export default function HomeScreen({ onSelect }) {
         <div className="status-pill">POC - Investor Demo 2026</div>
       </nav>
 
-      <div className={`hero landing-hero ${hero.isSports ? "landing-hero-sports" : "landing-hero-music"}`}>
+      <main>
+      <section className={`hero landing-hero ${hero.isSports ? "landing-hero-sports" : "landing-hero-music"}`} aria-labelledby="home-title">
         <div className="hero-kicker">
           Every legend has a story. Every story has a truth.
         </div>
         <div className="hero-rotator-label">
           {hero.label}
         </div>
-        <div className={`hero-title hero-rotator-title ${heroVisible ? "is-visible" : "is-hidden"}`}>
+        <h1 id="home-title" className={`hero-title hero-rotator-title ${heroVisible ? "is-visible" : "is-hidden"}`}>
           {hero.name}
-        </div>
+        </h1>
         <div className="hero-copy">
           Choose a category. Begin the journey.
         </div>
         <div className="hero-actions">
           <button className="primary-button premium-button cta-glow" onClick={() => setFilter("nba")}>
-            ◉ EXPLORE SPORTS
+            <span aria-hidden="true">◉ </span>EXPLORE SPORTS
           </button>
           <button className="secondary-button music-action" onClick={() => setFilter("hiphop")}>
-            ♪ EXPLORE MUSIC
+            <span aria-hidden="true">♪ </span>EXPLORE MUSIC
           </button>
         </div>
-      </div>
+      </section>
 
-      <div className="category-nav" aria-label="Story categories">
+      <nav className="category-nav" aria-label="Story categories">
         <div className="category-nav-inner">
           <button
+            type="button"
             className={`filter-tab ${filter === "all" ? "active" : ""}`}
+            aria-pressed={filter === "all"}
             onClick={() => setFilter("all")}
           >
             All
@@ -91,7 +102,9 @@ export default function HomeScreen({ onSelect }) {
             {sportsFilters.map((item) => (
               <button
                 key={item.id}
+                type="button"
                 className={`filter-tab filter-sports ${filter === item.id ? "active" : ""}`}
+                aria-pressed={filter === item.id}
                 onClick={() => setFilter(item.id)}
               >
                 {item.label}
@@ -103,7 +116,9 @@ export default function HomeScreen({ onSelect }) {
             {musicFilters.map((item) => (
               <button
                 key={item.id}
+                type="button"
                 className={`filter-tab filter-music ${filter === item.id ? "active" : ""}`}
+                aria-pressed={filter === item.id}
                 onClick={() => setFilter(item.id)}
               >
                 {item.label}
@@ -111,11 +126,11 @@ export default function HomeScreen({ onSelect }) {
             ))}
           </div>
         </div>
-      </div>
+      </nav>
 
       {filter === "all" && (
-        <section className="featured-section">
-          <div className="section-kicker">FEATURED STORIES</div>
+        <section className="featured-section" aria-labelledby="featured-stories-title">
+          <h2 id="featured-stories-title" className="section-kicker">FEATURED STORIES</h2>
           <div className="featured-grid">
             {FEATURED_PICKS.map((legend, i) => (
               <FeaturedStoryCard key={legend.id} legend={legend} delay={i * 80} onClick={() => onSelect(legend)} />
@@ -124,11 +139,11 @@ export default function HomeScreen({ onSelect }) {
         </section>
       )}
 
-      <section className="browse-section">
+      <section className="browse-section" aria-labelledby="browse-stories-title">
         <div className="browse-heading">
-          <div className="section-kicker">
+          <h2 id="browse-stories-title" className="section-kicker">
             {filter === "all" ? "ALL LEGENDS" : `${activeFilter.label} LEGENDS`}
-          </div>
+          </h2>
           <div className="browse-count">
             {filteredLegends.length} verified legacies
           </div>
@@ -137,6 +152,7 @@ export default function HomeScreen({ onSelect }) {
           {filteredLegends.map((a, i) => <AthleteCard key={a.id} athlete={a} delay={i * 50} onClick={() => onSelect(a)} />)}
         </div>
       </section>
+      </main>
 
       <div className="app-footer">
         <span>NBA · NFL · MLB · Hip-Hop · Rock · R&B / Soul · Jazz</span>

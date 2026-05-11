@@ -20,7 +20,7 @@ export default function TimelineMoment({ moment, index, total }) {
           <div className="moment-era">{moment.era}</div>
         </div>
         <div className="moment-marker-col">
-          <div className="moment-marker" />
+          <div className="moment-marker" aria-hidden="true" />
         </div>
         <div className={index < total - 1 ? "moment-body" : "moment-body last"}>
           <div className="type-pill">
@@ -29,8 +29,8 @@ export default function TimelineMoment({ moment, index, total }) {
           <div className="moment-title">{moment.title}</div>
           <div className="moment-copy">{moment.body}</div>
           <div className="source-row">
-            <div className="source-rule" />
-            <div>✓ {moment.src}</div>
+            <div className="source-rule" aria-hidden="true" />
+            <div><span aria-hidden="true">✓ </span>{moment.src}</div>
           </div>
           {moment.media?.length > 0 && (
             <div className="timeline-media-row">

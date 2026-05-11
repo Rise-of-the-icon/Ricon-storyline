@@ -5,9 +5,13 @@ export default function AthleteCard({ athlete, delay, onClick }) {
     : `${athlete.leagueLabel || "NBA"} · ${athlete.position} · ${athlete.years}`;
 
   return (
-    <div className={`card-root ${isMusic ? "music-card-root" : "sports-card-root"}`} onClick={onClick}
+    <button
+      type="button"
+      className={`card-root ${isMusic ? "music-card-root" : "sports-card-root"}`}
+      onClick={onClick}
+      aria-label={`Explore ${athlete.name} story`}
       style={{ animation: `fadeUp 0.6s ease ${delay}ms both` }}>
-      <div className="card-initials">
+      <div className="card-initials" aria-hidden="true">
         {athlete.initials}
       </div>
       {athlete.headshot && (
@@ -27,8 +31,8 @@ export default function AthleteCard({ athlete, delay, onClick }) {
         {athlete.tagline}
       </div>
       <div className="card-explore">
-        EXPLORE STORY <span style={{ fontSize: 13 }}>→</span>
+        EXPLORE STORY <span style={{ fontSize: 13 }} aria-hidden="true">→</span>
       </div>
-    </div>
+    </button>
   );
 }
