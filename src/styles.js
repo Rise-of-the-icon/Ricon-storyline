@@ -76,11 +76,47 @@ const CSS = `
   .status-pill { color: var(--premium); }
 
   .hero { padding: 76px 40px 56px; text-align: center; }
+  .landing-hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--border); }
+  .landing-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.55; transition: opacity var(--motion-emphasis); }
+  .landing-hero-sports::before { background: radial-gradient(ellipse at 50% 100%, rgba(201, 165, 77, 0.14), transparent 62%); }
+  .landing-hero-music::before { background: radial-gradient(ellipse at 50% 100%, rgba(96, 165, 250, 0.16), transparent 62%); }
+  .landing-hero > * { position: relative; z-index: 1; }
   .hero-kicker, .section-kicker { color: var(--accent); font-size: 0.78rem; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase; }
   .hero-kicker { margin-bottom: 22px; }
+  .hero-rotator-label { min-height: 1rem; margin-bottom: 12px; color: var(--premium); font-family: var(--font-mono); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; }
   .hero-title { display: block; margin-bottom: 20px; color: #EEF2F7; font-size: clamp(4rem, 12vw, 8.5rem); font-weight: 900; line-height: 0.92; letter-spacing: 0; }
+  .hero-rotator-title { min-height: clamp(4rem, 12vw, 8.5rem); display: flex; align-items: center; justify-content: center; transition: opacity var(--motion-emphasis), transform var(--motion-emphasis); }
+  .hero-rotator-title.is-hidden { opacity: 0; transform: translateY(10px); }
+  .hero-rotator-title.is-visible { opacity: 1; transform: translateY(0); }
   .hero-copy { color: var(--muted-foreground); font-size: 1.05rem; line-height: 1.7; }
+  .hero-actions { margin-top: 32px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+  .music-action { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, transparent); }
   .section-rule { margin: 0 40px 40px; height: 1px; background: linear-gradient(to right, transparent, var(--border), transparent); }
+  .category-nav { position: sticky; top: 0; z-index: 80; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--background) 88%, transparent); backdrop-filter: blur(24px); }
+  .category-nav-inner { min-height: 58px; padding: 0 40px; display: flex; align-items: stretch; gap: 14px; overflow-x: auto; }
+  .filter-group { display: flex; align-items: center; gap: 4px; padding-left: 14px; border-left: 1px solid var(--border); flex-shrink: 0; }
+  .filter-group-label { padding-right: 8px; color: var(--muted-foreground); font-family: var(--font-mono); font-size: 0.66rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.62; }
+  .filter-tab { min-height: 58px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted-foreground); font-family: var(--font-mono); font-size: 0.72rem; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; transition: color var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast); }
+  .filter-tab:hover { color: var(--card-foreground); background: rgba(255, 255, 255, 0.025); }
+  .filter-tab.active, .filter-sports.active { color: var(--premium); border-bottom-color: var(--premium); }
+  .filter-music.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .featured-section, .browse-section { padding: 48px 32px 0; }
+  .featured-section .section-kicker { margin: 0 8px 18px; }
+  .featured-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .featured-card { min-height: 220px; padding: 26px; display: flex; flex-direction: column; justify-content: space-between; gap: 28px; text-align: left; border: 1px solid var(--border); border-radius: var(--radius-md); background: color-mix(in srgb, var(--card) 84%, transparent); color: var(--foreground); box-shadow: var(--shadow-soft); transition: transform var(--motion-standard) var(--ease-out), border-color var(--motion-standard), box-shadow var(--motion-standard); }
+  .featured-card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--premium) 44%, var(--border)); box-shadow: var(--shadow-medium); }
+  .featured-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  .featured-enter { color: var(--accent); font-family: var(--font-mono); font-size: 0.68rem; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0; transform: translateX(8px); transition: opacity var(--motion-standard), transform var(--motion-standard); }
+  .featured-card:hover .featured-enter { opacity: 1; transform: translateX(0); }
+  .featured-title { margin-bottom: 10px; color: var(--card-foreground); font-size: clamp(1.6rem, 3vw, 2.25rem); font-weight: 900; line-height: 1.05; }
+  .featured-copy { margin-bottom: 12px; color: var(--muted-foreground); font-size: 0.95rem; line-height: 1.6; }
+  .featured-meta, .browse-count, .nav-context { color: var(--muted-foreground); font-family: var(--font-mono); font-size: 0.7rem; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; }
+  .browse-section { padding-bottom: 80px; }
+  .browse-heading { display: flex; align-items: baseline; gap: 14px; margin: 0 8px 24px; flex-wrap: wrap; }
+  .eyebrow-music { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .eyebrow-sports { color: var(--premium); border-color: color-mix(in srgb, var(--premium) 42%, var(--border)); background: color-mix(in srgb, var(--premium) 10%, transparent); }
+  .music-card-root:hover { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); }
+  .music-card-root .card-initials { color: var(--accent); }
   .athlete-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; padding: 0 32px 80px; }
   .app-footer { padding: 28px 40px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; color: var(--muted-foreground); font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
 

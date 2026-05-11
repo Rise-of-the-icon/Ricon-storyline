@@ -30,6 +30,10 @@ const pickMoment = (athlete, query, fallbackIndex = 0) => {
 
 const statLine = (athlete) => athlete.stats.map(s => `${s.v} ${s.l}`).join(", ");
 
+const roleContext = (athlete) => athlete.cat === "music"
+  ? `${athlete.genreLabel} across ${athlete.years}, with documented works including ${athlete.credits}`
+  : `${athlete.position} across ${athlete.years}, with ${athlete.teams}`;
+
 const narratorBeats = [
   {
     media: [{ title: "Draft Night Archive", meta: "1984 · Source footage placeholder" }],
@@ -78,11 +82,12 @@ const answerQuestion = (athlete, question) => {
   const moment = pickMoment(athlete, question, 1);
 
   if (q.includes("stat") || q.includes("average") || q.includes("ppg") || q.includes("championship") || q.includes("ring")) {
-    return `The verified line is ${statLine(athlete)}. I played ${athlete.position} across ${athlete.years}, with ${athlete.teams}. The numbers matter because they point back to documented chapters like ${moment.y}, ${moment.title}.`;
+      return `The verified line is ${statLine(athlete)}. My documented context is ${roleContext(athlete)}. The numbers matter because they point back to documented chapters like ${moment.y}, ${moment.title}.`;
   }
 
-  if (q.includes("team") || q.includes("played for")) {
-    return `The verified teams are ${athlete.teams}. That path is part of the story, but the clearest archive marker here is ${moment.y}: ${moment.title}. ${moment.body}`;
+  if (q.includes("team") || q.includes("played for") || q.includes("album") || q.includes("song") || q.includes("work")) {
+    const path = athlete.cat === "music" ? `The verified works are ${athlete.credits}` : `The verified teams are ${athlete.teams}`;
+    return `${path}. That path is part of the story, but the clearest archive marker here is ${moment.y}: ${moment.title}. ${moment.body}`;
   }
 
   if (q.includes("best") || q.includes("biggest") || q.includes("defining") || q.includes("moment")) {

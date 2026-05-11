@@ -1,14 +1,23 @@
 import TimelineMoment from "./TimelineMoment";
 
 export default function AthleteScreen({ athlete, onBack, onTwin }) {
+  const isMusic = athlete.cat === "music";
+  const categoryLabel = isMusic ? athlete.genreLabel : athlete.leagueLabel;
+  const metaLabel = isMusic
+    ? `${athlete.genreLabel} · ${athlete.credits}`
+    : `${athlete.position} · ${athlete.teams}`;
+  const timelineLabel = isMusic ? "ARTISTIC TIMELINE" : "CAREER TIMELINE";
+  const firstName = athlete.name.split(" ")[0].replace(/^The$/, athlete.name.split(" ")[1] || "legend");
+
   return (
     <div className="animate-page-enter">
       <nav className="app-nav sticky">
         <button className="ghost-button" onClick={onBack}>
-          ← ROSTER
+          ← BROWSE
         </button>
         <div className="nav-divider" />
         <span className="brand-submark">RICON Storyline</span>
+        {categoryLabel && <span className="nav-context">{categoryLabel}</span>}
         <div className="nav-spacer" />
         <button className="primary-button premium-button cta-glow" onClick={() => onTwin("narrator")}>
           ◉ ACTIVATE DIGITAL TWIN
@@ -25,7 +34,7 @@ export default function AthleteScreen({ athlete, onBack, onTwin }) {
           </div>
         )}
         <div className="athlete-meta">
-          {athlete.position} · {athlete.teams}
+          {metaLabel}
         </div>
         <h1 className="athlete-name">
           {athlete.name}
@@ -48,7 +57,7 @@ export default function AthleteScreen({ athlete, onBack, onTwin }) {
         <div>
           <div className="twin-banner-title">DIGITAL TWIN AVAILABLE</div>
           <div className="twin-banner-copy">
-            Interact with {athlete.name.split(" ")[0]}'s verified AI twin. Choose Narrator mode to relive the story, or Q&A mode to ask anything directly.
+            Interact with {firstName}'s verified AI twin. Choose Narrator mode to relive the story, or Q&A mode to ask anything directly.
           </div>
         </div>
         <div className="button-row">
@@ -59,7 +68,7 @@ export default function AthleteScreen({ athlete, onBack, onTwin }) {
 
       <div className="timeline-section">
         <div className="section-kicker" style={{ marginBottom: 56 }}>
-          CAREER TIMELINE · {athlete.moments.length} VERIFIED MOMENTS
+          {timelineLabel} · {athlete.moments.length} VERIFIED MOMENTS
         </div>
         <div className="timeline-wrap">
           <div className="timeline-line" />

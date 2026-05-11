@@ -3,11 +3,11 @@ import CSS from "./src/styles";
 import HomeScreen from "./src/components/HomeScreen";
 import AthleteScreen from "./src/components/AthleteScreen";
 import TwinModal from "./src/components/TwinModal";
-import { ATHLETES } from "./src/data/athletes";
+import { LEGENDS } from "./src/data/athletes";
 
 export default function RICONStoryline() {
   const figmaTwinMode = new URLSearchParams(window.location.search).get("figmaTwin");
-  const figmaAthlete = figmaTwinMode ? ATHLETES.find(a => a.id === "jordan") : null;
+  const figmaAthlete = figmaTwinMode ? LEGENDS.find(a => a.id === "jordan") : null;
   const [screen, setScreen] = useState(figmaAthlete ? "athlete" : "home");
   const [athlete, setAthlete] = useState(figmaAthlete);
   const [twinOpen, setTwinOpen] = useState(Boolean(figmaTwinMode));

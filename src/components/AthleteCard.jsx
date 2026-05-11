@@ -1,6 +1,11 @@
 export default function AthleteCard({ athlete, delay, onClick }) {
+  const isMusic = athlete.cat === "music";
+  const label = isMusic
+    ? `${athlete.genreLabel} · ${athlete.years}`
+    : `${athlete.leagueLabel || "NBA"} · ${athlete.position} · ${athlete.years}`;
+
   return (
-    <div className="card-root" onClick={onClick}
+    <div className={`card-root ${isMusic ? "music-card-root" : "sports-card-root"}`} onClick={onClick}
       style={{ animation: `fadeUp 0.6s ease ${delay}ms both` }}>
       <div className="card-initials">
         {athlete.initials}
@@ -11,8 +16,8 @@ export default function AthleteCard({ athlete, delay, onClick }) {
         </div>
       )}
       <div className="card-top">
-        <div className="eyebrow-pill">
-          {athlete.position} · {athlete.years}
+        <div className={`eyebrow-pill ${isMusic ? "eyebrow-music" : "eyebrow-sports"}`}>
+          {label}
         </div>
       </div>
       <div className="card-title">

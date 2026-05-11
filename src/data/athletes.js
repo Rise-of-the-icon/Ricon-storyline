@@ -98,6 +98,248 @@ export const ATHLETES = [
   },
 ];
 
+const withSportsDefaults = (legend, league, leagueLabel) => ({
+  cat: "sports",
+  league,
+  leagueLabel,
+  ...legend,
+});
+
+const withMusicDefaults = (legend, genre, genreLabel) => ({
+  cat: "music",
+  genre,
+  genreLabel,
+  position: genreLabel,
+  teams: legend.credits,
+  ...legend,
+});
+
+export const NBA_LEGENDS = ATHLETES.map((legend) => withSportsDefaults(legend, "nba", "NBA"));
+
+export const NFL_LEGENDS = [
+  withSportsDefaults({
+    id:"brady", name:"Tom Brady", initials:"TB", years:"2000 – 2023", position:"QB",
+    tagline:"Seven times. Because once was never going to be enough.",
+    teams:"New England Patriots · Tampa Bay Buccaneers",
+    stats:[{l:"Super Bowls",v:"7"},{l:"SB MVPs",v:"5"},{l:"Career TDs",v:"649"},{l:"Pro Bowls",v:"15"}],
+    voice:"Relentlessly competitive, disarmingly self-aware. Speaks with the measured tone of someone who has already won the argument. The chip on his shoulder never left.",
+    moments:[
+      {y:"2000",era:"The Beginning",type:"draft",title:"Drafted 199th Overall",body:"The New England Patriots select Tom Brady 199th overall. Six quarterbacks are taken before him. None of them will ever get over it.",src:"NFL Draft Records, 2000"},
+      {y:"2002",era:"Dynasty I",type:"championship",title:"Super Bowl XXXVI — The First",body:"The Patriots upset the Rams 20-17. Brady is named Super Bowl MVP in only his second season. Nobody understands what is beginning.",src:"Super Bowl XXXVI Records, February 2002"},
+      {y:"2017",era:"Dynasty I",type:"iconic",title:"28-3 — The Greatest Comeback",body:"Trailing Atlanta 28-3 in Super Bowl LI, Brady leads the greatest comeback in Super Bowl history. The number becomes shorthand for impossibility defeated.",src:"Super Bowl LI Records, February 2017"},
+      {y:"2021",era:"Tampa Chapter",type:"championship",title:"Super Bowl LV — At 43",body:"Brady wins his seventh Super Bowl with his second franchise. The GOAT debate has been resolved for everyone who was paying attention.",src:"Super Bowl LV Records, February 2021"},
+    ],
+  }, "nfl", "NFL"),
+  withSportsDefaults({
+    id:"manning_p", name:"Peyton Manning", initials:"PM", years:"1998 – 2016", position:"QB",
+    tagline:"He mastered the game entirely through his mind.",
+    teams:"Indianapolis Colts · Denver Broncos",
+    stats:[{l:"MVP Awards",v:"5"},{l:"Super Bowls",v:"2"},{l:"Passing TDs",v:"539"},{l:"Pro Bowls",v:"14"}],
+    voice:"Cerebral, precise, with dry wit that surprises. Speaks about football as a chess match. Every answer has a system behind it.",
+    moments:[
+      {y:"2004",era:"Colts Dynasty",type:"record",title:"49 Touchdown Passes",body:"Manning throws 49 touchdown passes, breaking Dan Marino's single-season record. The number is what perfect preparation produces.",src:"NFL Season Records, 2004"},
+      {y:"2007",era:"Colts Dynasty",type:"championship",title:"Super Bowl XLI — Champion",body:"Manning guides the Colts to victory over the Bears and is named Super Bowl MVP. The preparation machine has its proof.",src:"Super Bowl XLI Records, February 2007"},
+      {y:"2016",era:"Denver Chapter",type:"championship",title:"Second Super Bowl — At 39",body:"Manning wins his second championship with Denver and retires as one of football's most technically accomplished quarterbacks.",src:"Super Bowl 50 Records, February 2016"},
+    ],
+  }, "nfl", "NFL"),
+  withSportsDefaults({
+    id:"rice_j", name:"Jerry Rice", initials:"JR", years:"1985 – 2004", position:"WR",
+    tagline:"Every record he holds, he deserved twice over.",
+    teams:"San Francisco 49ers · Oakland Raiders",
+    stats:[{l:"Receiving TDs",v:"197"},{l:"Receptions",v:"1,549"},{l:"Super Bowls",v:"3"},{l:"Pro Bowls",v:"13"}],
+    voice:"Humble but deeply proud of the work. Quiet fury disguised as gratitude. Speaks about preparation as a moral value.",
+    moments:[
+      {y:"1989",era:"49ers Dynasty",type:"championship",title:"Super Bowl XXIII MVP",body:"Rice catches 11 passes for 215 yards and a touchdown. He is the most dangerous player on the most dangerous team.",src:"Super Bowl XXIII Records, January 1989"},
+      {y:"1994",era:"49ers Dynasty",type:"record",title:"All-Time Receiving Leader",body:"Rice surpasses Steve Largent to become the NFL's all-time leader in receptions, yards, and touchdowns. The record is not the destination.",src:"NFL Records, 1994"},
+    ],
+  }, "nfl", "NFL"),
+  withSportsDefaults({
+    id:"sanders_b", name:"Barry Sanders", initials:"BS", years:"1989 – 1998", position:"RB",
+    tagline:"He made defenders disappear.",
+    teams:"Detroit Lions",
+    stats:[{l:"Rushing Yards",v:"15,269"},{l:"Rush Titles",v:"4"},{l:"MVP Awards",v:"1"},{l:"Pro Bowls",v:"10"}],
+    voice:"Modest, elusive even in speech. Lets the record speak. Never asked for recognition; the game made recognition mandatory.",
+    moments:[
+      {y:"1997",era:"The Peak",type:"record",title:"2,053 Rushing Yards",body:"Sanders rushes for 2,053 yards in a single season and is named NFL MVP. The Lions miss the playoffs. He carries that contradiction his entire career.",src:"NFL Season Records, 1997"},
+      {y:"1998",era:"The Farewell",type:"retirement",title:"Retirement — One Year Short",body:"Sanders retires 1,457 yards short of Walter Payton's all-time record. No press conference. The love had been paid in full.",src:"Detroit Free Press, July 1999"},
+    ],
+  }, "nfl", "NFL"),
+];
+
+export const MLB_LEGENDS = [
+  withSportsDefaults({
+    id:"ruth", name:"Babe Ruth", initials:"BR", years:"1914 – 1935", position:"RF / P",
+    tagline:"He invented what baseball could be.",
+    teams:"Red Sox · Yankees · Braves",
+    stats:[{l:"Home Runs",v:"714"},{l:"World Series",v:"4"},{l:"Career OPS",v:"1.164"},{l:"Batting Avg",v:".342"}],
+    voice:"Large, unfiltered, barnstorming confidence. Speaks in superlatives because the record backs them up. Enormous generosity beneath the showmanship.",
+    moments:[
+      {y:"1920",era:"Yankees Chapter",type:"iconic",title:"Sold to New York",body:"Sold by the Red Sox for $100,000. He arrives in New York and hits 54 home runs, more than any other entire team.",src:"Baseball Reference Historical Records, 1920"},
+      {y:"1927",era:"The Peak",type:"record",title:"60 Home Runs",body:"Ruth hits 60 home runs in 1927. The record stands for 34 years and changes the sport's sense of scale.",src:"MLB Season Records, 1927"},
+      {y:"1932",era:"The Legend",type:"iconic",title:"The Called Shot",body:"Game 3 of the World Series. Ruth points, then hits the next pitch where legend says he aimed. The gesture is disputed. The home run is not.",src:"Chicago Tribune and NYT, October 1932"},
+    ],
+  }, "mlb", "MLB"),
+  withSportsDefaults({
+    id:"mays", name:"Willie Mays", initials:"WM", years:"1951 – 1973", position:"CF",
+    tagline:"The greatest all-around player the game has ever seen.",
+    teams:"San Francisco Giants · New York Mets",
+    stats:[{l:"Home Runs",v:"660"},{l:"World Series",v:"1"},{l:"Gold Gloves",v:"12"},{l:"Batting Avg",v:".302"}],
+    voice:"Joyful, dignified, generous. The game was never work; it was pure expression.",
+    moments:[
+      {y:"1954",era:"New York Chapter",type:"iconic",title:"The Catch",body:"Mays turns his back to home plate, runs down a deep fly ball, catches it over his shoulder, and redefines what is possible in the outfield.",src:"MLB World Series Records, September 1954"},
+      {y:"1961",era:"San Francisco Chapter",type:"record",title:"Four Home Runs in One Game",body:"Mays hits four home runs against the Braves. He is 30 years old and at the peak of a peak that seems to have no edge.",src:"MLB Records, April 30 1961"},
+    ],
+  }, "mlb", "MLB"),
+  withSportsDefaults({
+    id:"jeter", name:"Derek Jeter", initials:"DJ", years:"1995 – 2014", position:"SS",
+    tagline:"Captain. In every sense of the word.",
+    teams:"New York Yankees",
+    stats:[{l:"World Series",v:"5"},{l:"Career Hits",v:"3,465"},{l:"Gold Gloves",v:"5"},{l:"All-Star",v:"14x"}],
+    voice:"Measured, accountable, deeply proud of the pinstripes. Speaks in team before self.",
+    moments:[
+      {y:"1996",era:"Dynasty I",type:"championship",title:"World Series Champion — Rookie Year",body:"Jeter wins the World Series in his first full season and is named AL Rookie of the Year. He is 22 and already plays like a veteran.",src:"MLB World Series Records, 1996"},
+      {y:"2001",era:"The Iconic",type:"iconic",title:"Mr. November",body:"At 12:04 AM on November 1, Jeter hits a walk-off homer in the 10th. From that night forward, he is Mr. November.",src:"MLB World Series Records, November 2001"},
+      {y:"2014",era:"The Farewell",type:"retirement",title:"Final Game in New York",body:"Jeter's final game at Yankee Stadium ends with a walk-off RBI single. He disappears exactly as he arrived, with the game on the line.",src:"New York Times, September 25 2014"},
+    ],
+  }, "mlb", "MLB"),
+  withSportsDefaults({
+    id:"aaron", name:"Hank Aaron", initials:"HA", years:"1954 – 1976", position:"RF",
+    tagline:"He carried the record and everything it cost him.",
+    teams:"Milwaukee and Atlanta Braves · Milwaukee Brewers",
+    stats:[{l:"Home Runs",v:"755"},{l:"RBI",v:"2,297"},{l:"All-Star",v:"25x"},{l:"World Series",v:"1"}],
+    voice:"Measured, dignified, historically aware. Speaks with earned authority about perseverance and the cost of excellence.",
+    moments:[
+      {y:"1957",era:"Milwaukee Chapter",type:"championship",title:"World Series Champion",body:"Aaron's walk-off homer in the 11th inning clinches the pennant. The Braves beat the Yankees in seven games.",src:"MLB World Series Records, 1957"},
+      {y:"1974",era:"The Record",type:"record",title:"715 — Breaking Ruth's Record",body:"Career home run number 715 surpasses Babe Ruth. He had received death threats for years. He rounds the bases. He finishes.",src:"Atlanta Journal-Constitution and MLB Records, April 1974"},
+    ],
+  }, "mlb", "MLB"),
+];
+
+export const MUSIC_LEGENDS = [
+  withMusicDefaults({
+    id:"tupac", name:"Tupac Shakur", initials:"2P", years:"1991 – 1996",
+    tagline:"He spoke the truth before the world was ready to hear it.",
+    credits:"All Eyez on Me · Me Against the World · Dear Mama",
+    stats:[{l:"Studio Albums",v:"6"},{l:"Certified Platinum",v:"75M"},{l:"Films",v:"7"},{l:"Years Active",v:"5"}],
+    voice:"Prophetic, poetic, burning with purpose. Speaks in truths that feel ahead of their time because they were.",
+    moments:[
+      {y:"1991",era:"The Voice Arrives",type:"draft",title:"2Pacalypse Now",body:"Tupac releases his debut at 20. Every track is testimony. The voice arrives fully formed and prophetic.",src:"Interscope Records, November 1991"},
+      {y:"1995",era:"The Masterstroke",type:"record",title:"Me Against the World",body:"Tupac releases his most intimate album while incarcerated. It debuts at number one.",src:"Interscope Records and Billboard Charts, March 1995"},
+      {y:"1996",era:"The Summit",type:"iconic",title:"All Eyez on Me",body:"Twenty-seven tracks released across two discs in a single day. He records it like a man who knows time is not infinite.",src:"Death Row Records, February 1996"},
+    ],
+  }, "hiphop", "Hip-Hop"),
+  withMusicDefaults({
+    id:"jay_z", name:"Jay-Z", initials:"JZ", years:"1996 – present",
+    tagline:"He turned hustle into an empire and art into a legacy.",
+    credits:"Reasonable Doubt · The Blueprint · 4:44",
+    stats:[{l:"Studio Albums",v:"14"},{l:"Grammy Awards",v:"24"},{l:"Certified Platinum",v:"100M+"},{l:"Net Worth",v:"$2.5B+"}],
+    voice:"Strategic, layered, controlled. Every sentence contains at least two meanings. Speaks about business and art as the same act.",
+    moments:[
+      {y:"1996",era:"The Foundation",type:"draft",title:"Reasonable Doubt",body:"Unable to get a label deal, Jay-Z co-founds Roc-A-Fella Records and releases Reasonable Doubt independently.",src:"Roc-A-Fella Records, June 1996"},
+      {y:"2001",era:"The Blueprint",type:"iconic",title:"The Blueprint",body:"The Blueprint redefined hip-hop's sonic palette and elevated craft above spectacle.",src:"Roc-A-Fella Records, September 2001"},
+      {y:"2017",era:"The Reflection",type:"record",title:"4:44",body:"At 47, Jay-Z releases his most personal album, exploring family, Black wealth, and accountability.",src:"Tidal and Universal Music Group, June 2017"},
+    ],
+  }, "hiphop", "Hip-Hop"),
+  withMusicDefaults({
+    id:"biggie", name:"The Notorious B.I.G.", initials:"BIG", years:"1992 – 1997",
+    tagline:"The greatest rapper of all time. Full stop.",
+    credits:"Ready to Die · Life After Death",
+    stats:[{l:"Studio Albums",v:"2"},{l:"US Number 1 Albums",v:"1"},{l:"Certified Platinum",v:"25M+"},{l:"Years Active",v:"5"}],
+    voice:"Unshakeable confidence beneath the warmth. Humor as disarming weapon. The borough as identity.",
+    moments:[
+      {y:"1994",era:"The Introduction",type:"draft",title:"Ready to Die",body:"Brooklyn's Christopher Wallace releases Ready to Die at 22. It sounds less like a debut than an arrival.",src:"Bad Boy Records, September 1994"},
+      {y:"1997",era:"The Legacy",type:"iconic",title:"Life After Death",body:"The double album drops 16 days after his passing and debuts at number one. The gift was real and permanent.",src:"Bad Boy Records, March 1997"},
+    ],
+  }, "hiphop", "Hip-Hop"),
+  withMusicDefaults({
+    id:"hendrix", name:"Jimi Hendrix", initials:"JH", years:"1963 – 1970",
+    tagline:"He made the guitar speak in a language no one had heard.",
+    credits:"Are You Experienced · Electric Ladyland · Axis: Bold as Love",
+    stats:[{l:"Studio Albums",v:"3"},{l:"Years Active",v:"7"},{l:"Legacy Rank",v:"Number 1 Guitarist"},{l:"Hall of Fame",v:"1992"}],
+    voice:"Mystical, otherworldly, speaks in colors and frequencies. Humble about the instrument because it was just the translator.",
+    moments:[
+      {y:"1967",era:"The Explosion",type:"draft",title:"Are You Experienced",body:"Hendrix releases his debut and the guitar has a new ceiling, or no ceiling at all.",src:"Track Records, May 1967"},
+      {y:"1968",era:"The Masterwork",type:"record",title:"Electric Ladyland",body:"His double album masterpiece engineers a sonic world years ahead of its time.",src:"Reprise Records, October 1968"},
+      {y:"1969",era:"Woodstock",type:"iconic",title:"The National Anthem",body:"Hendrix closes Woodstock with a guitar rendition of the national anthem still discussed as one of the century's defining performances.",src:"Woodstock Festival Records, August 18 1969"},
+    ],
+  }, "rock", "Rock"),
+  withMusicDefaults({
+    id:"bowie", name:"David Bowie", initials:"DB", years:"1967 – 2016",
+    tagline:"He reinvented himself so often, he reinvented pop music.",
+    credits:"Ziggy Stardust · Heroes · Hunky Dory · Blackstar",
+    stats:[{l:"Studio Albums",v:"26"},{l:"Grammy Awards",v:"5"},{l:"Certified Platinum",v:"100M+"},{l:"Years Active",v:"49"}],
+    voice:"Observational, philosophical, curious without anxiety. Speaks about transformation as the artist's responsibility.",
+    moments:[
+      {y:"1972",era:"Ziggy Stardust",type:"iconic",title:"Ziggy Stardust",body:"Bowie creates Ziggy Stardust and performs the character into reality. Popular culture has a new permission slip.",src:"RCA Records, June 1972"},
+      {y:"1977",era:"Berlin Trilogy",type:"record",title:"Heroes",body:"Recorded in Berlin with Brian Eno, the title track becomes a hymn for anyone who believes in something larger than themselves.",src:"RCA Records, October 1977"},
+      {y:"2016",era:"The Farewell",type:"retirement",title:"Blackstar",body:"Bowie releases Blackstar on his 69th birthday. Two days later, he is gone. Art as final statement.",src:"ISO Records, January 8 2016"},
+    ],
+  }, "rock", "Rock"),
+  withMusicDefaults({
+    id:"aretha", name:"Aretha Franklin", initials:"AF", years:"1956 – 2018",
+    tagline:"She did not sing for respect. She commanded it.",
+    credits:"I Never Loved a Man · Respect · Amazing Grace",
+    stats:[{l:"Grammy Awards",v:"18"},{l:"Certified Platinum",v:"75M+"},{l:"Presidential Medal",v:"Freedom"},{l:"Years Active",v:"62"}],
+    voice:"Regal, uncompromising, deeply spiritual. The church was the foundation everything else was built on.",
+    moments:[
+      {y:"1967",era:"The Arrival",type:"iconic",title:"Respect",body:"Franklin transforms Otis Redding's song into a reclamation and an anthem for civil rights and women.",src:"Atlantic Records, April 1967"},
+      {y:"1972",era:"The Masterwork",type:"record",title:"Amazing Grace",body:"Franklin returns to church roots and records the best-selling gospel album in history.",src:"Atlantic Records, June 1972"},
+      {y:"2009",era:"The Legacy",type:"iconic",title:"Obama Inauguration",body:"Franklin performs at the inauguration of the 44th President. The National Mall goes silent with recognition.",src:"Presidential Inauguration Records, January 2009"},
+    ],
+  }, "rnb", "R&B / Soul"),
+  withMusicDefaults({
+    id:"michael_j", name:"Michael Jackson", initials:"MJJ", years:"1969 – 2009",
+    tagline:"He is the record. He will always be the record.",
+    credits:"Thriller · Off the Wall · Bad · Dangerous",
+    stats:[{l:"Grammy Awards",v:"13"},{l:"Thriller Sales",v:"66M+"},{l:"Certified Platinum",v:"350M+"},{l:"World Tours",v:"7"}],
+    voice:"Gentle and absolute simultaneously. Speaks about art with sincerity. The perfectionist's regret is always beneath the pride.",
+    moments:[
+      {y:"1979",era:"Off the Wall",type:"iconic",title:"Off the Wall",body:"Jackson releases Off the Wall at 21 and begins the partnership with Quincy Jones that will change everything.",src:"Epic Records, August 1979"},
+      {y:"1982",era:"Thriller Era",type:"record",title:"Thriller",body:"Thriller produces seven top-10 singles. A 24-year-old redefines popular music.",src:"Epic Records, November 1982"},
+      {y:"1988",era:"Bad Era",type:"iconic",title:"The Bad World Tour",body:"The Bad World Tour spans 16 months, 15 countries, and 123 concerts.",src:"MJJ Productions Tour Records, 1987-89"},
+    ],
+  }, "rnb", "R&B / Soul"),
+  withMusicDefaults({
+    id:"miles", name:"Miles Davis", initials:"MD", years:"1944 – 1991",
+    tagline:"He changed jazz not once, not twice, but five times.",
+    credits:"Kind of Blue · Bitches Brew · Birth of the Cool",
+    stats:[{l:"Studio Albums",v:"48"},{l:"Grammy Awards",v:"8"},{l:"Grammy Lifetime",v:"Achievement"},{l:"Eras Defined",v:"5+"}],
+    voice:"Minimalist, direct, and certain. Never explains himself. The silence between notes is where the meaning lives.",
+    moments:[
+      {y:"1949",era:"Birth of Cool",type:"iconic",title:"Birth of the Cool Sessions",body:"Davis leads sessions that define cool jazz. At 23, he already has an artistic theory of what music can do.",src:"Capitol Records Sessions, 1949-50"},
+      {y:"1959",era:"Modal Jazz",type:"record",title:"Kind of Blue",body:"Kind of Blue changes jazz quietly, permanently, completely. Modal improvisation. Space as instrument.",src:"Columbia Records, August 1959"},
+      {y:"1970",era:"Electric Fusion",type:"iconic",title:"Bitches Brew",body:"Davis absorbs electricity from Sly Stone and Hendrix. Bitches Brew becomes the birth of jazz fusion.",src:"Columbia Records, March 1970"},
+    ],
+  }, "jazz", "Jazz"),
+];
+
+export const LEGENDS = [...NBA_LEGENDS, ...NFL_LEGENDS, ...MLB_LEGENDS, ...MUSIC_LEGENDS];
+
+export const FEATURED_HERO = [
+  {name:"MICHAEL JORDAN",label:"NBA · BASKETBALL",filter:"nba",isSports:true},
+  {name:"TOM BRADY",label:"NFL · FOOTBALL",filter:"nfl",isSports:true},
+  {name:"TUPAC SHAKUR",label:"HIP-HOP · MUSIC",filter:"hiphop",isSports:false},
+  {name:"BABE RUTH",label:"MLB · BASEBALL",filter:"mlb",isSports:true},
+  {name:"JIMI HENDRIX",label:"ROCK · MUSIC",filter:"rock",isSports:false},
+  {name:"ARETHA FRANKLIN",label:"R&B / SOUL · MUSIC",filter:"rnb",isSports:false},
+  {name:"MILES DAVIS",label:"JAZZ · MUSIC",filter:"jazz",isSports:false},
+];
+
+export const FILTERS = [
+  {id:"all",label:"All",type:"all",match:()=>true},
+  {id:"nba",label:"NBA",type:"sports",match:legend=>legend.league==="nba"},
+  {id:"nfl",label:"NFL",type:"sports",match:legend=>legend.league==="nfl"},
+  {id:"mlb",label:"MLB",type:"sports",match:legend=>legend.league==="mlb"},
+  {id:"hiphop",label:"Hip-Hop",type:"music",match:legend=>legend.genre==="hiphop"},
+  {id:"rock",label:"Rock",type:"music",match:legend=>legend.genre==="rock"},
+  {id:"rnb",label:"R&B / Soul",type:"music",match:legend=>legend.genre==="rnb"},
+  {id:"jazz",label:"Jazz",type:"music",match:legend=>legend.genre==="jazz"},
+];
+
+export const FEATURED_PICKS = ["jordan", "tupac", "brady"]
+  .map((id) => LEGENDS.find((legend) => legend.id === id))
+  .filter(Boolean);
+
 export const TYPE_CONFIG = {
   draft:        { label:"DRAFT",   icon:"◈", color:"#60A5FA" },
   record:       { label:"RECORD",  icon:"◆", color:"#F59E0B" },
@@ -107,14 +349,21 @@ export const TYPE_CONFIG = {
   return:       { label:"RETURN",  icon:"↩", color:"#10B981" },
 };
 
-export const buildSystemPrompt = (a) => `You are the verified Digital Twin of ${a.name}, powered exclusively by documented, source-backed biographical data.
+export const buildSystemPrompt = (a) => {
+  const context = a.cat === "music"
+    ? `- Active Years: ${a.years}
+- Genre: ${a.genreLabel}
+- Notable Works: ${a.credits}`
+    : `- Active Years: ${a.years}
+- Position: ${a.position}
+- Teams: ${a.teams}`;
+
+  return `You are the verified Digital Twin of ${a.name}, powered exclusively by documented, source-backed biographical data.
 
 PERSONALITY: ${a.voice}
 
 YOUR VERIFIED CAREER DATA:
-- Active Years: ${a.years}
-- Position: ${a.position}
-- Teams: ${a.teams}
+${context}
 - Career Stats: ${a.stats.map(s=>`${s.l}: ${s.v}`).join(" | ")}
 - Documented Moments:
 ${a.moments.map(m=>`  [${m.y}] ${m.title} — ${m.body}`).join("\n")}
@@ -127,3 +376,4 @@ RULES — NON-NEGOTIABLE:
 5. Keep all responses under 200 words. Powerful and precise. No filler.
 6. You are not a chatbot. You are a legacy speaking through verified truth.
 7. Reference specific years and moments when relevant to ground your answer in fact.`;
+};
