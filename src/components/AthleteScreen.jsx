@@ -12,20 +12,20 @@ export default function AthleteScreen({ athlete, onBack, onTwin }) {
   return (
     <div className="animate-page-enter">
       <nav className="app-nav sticky" aria-label={`${athlete.name} story`}>
-        <button className="ghost-button" onClick={onBack}>
+        <button type="button" className="ghost-button" onClick={onBack}>
           <span aria-hidden="true">← </span>BROWSE
         </button>
         <div className="nav-divider" />
         <span className="brand-submark">RICON Storyline</span>
         {categoryLabel && <span className="nav-context">{categoryLabel}</span>}
         <div className="nav-spacer" />
-        <button className="primary-button premium-button cta-glow" onClick={() => onTwin("narrator")}>
+        <button type="button" className="primary-button premium-button cta-glow" onClick={() => onTwin("narrator")}>
           <span aria-hidden="true">◉ </span>ACTIVATE DIGITAL TWIN
         </button>
       </nav>
 
       <main>
-      <div className="athlete-hero">
+        <div className="athlete-hero">
         <div className="athlete-watermark" aria-hidden="true">
           {athlete.initials}
         </div>
@@ -62,8 +62,8 @@ export default function AthleteScreen({ athlete, onBack, onTwin }) {
           </div>
         </div>
         <div className="button-row">
-          <button className="primary-button" onClick={() => onTwin("narrator")}><span aria-hidden="true">▶ </span>NARRATOR</button>
-          <button className="secondary-button" onClick={() => onTwin("qa")}><span aria-hidden="true">✦ </span>ASK ME ANYTHING</button>
+          <button type="button" className="primary-button" onClick={() => onTwin("narrator")}><span aria-hidden="true">▶ </span>NARRATOR</button>
+          <button type="button" className="secondary-button" onClick={() => onTwin("qa")}><span aria-hidden="true">✦ </span>ASK ME ANYTHING</button>
         </div>
       </div>
 
@@ -72,14 +72,14 @@ export default function AthleteScreen({ athlete, onBack, onTwin }) {
           {timelineLabel} · {athlete.moments.length} VERIFIED MOMENTS
         </h2>
         <div className="timeline-wrap">
-          <div className="timeline-line" />
+          <div className="timeline-line" aria-hidden="true" />
           {athlete.moments.map((m, i) => <TimelineMoment key={i} moment={m} index={i} total={athlete.moments.length} />)}
         </div>
       </section>
 
       <div className="closing-cta">
         <div className="closing-copy">The story doesn't end here.</div>
-        <button className="secondary-button" onClick={() => onTwin("qa")}>
+        <button type="button" className="secondary-button" onClick={() => onTwin("qa")}>
           ASK THE DIGITAL TWIN <span aria-hidden="true">→</span>
         </button>
       </div>

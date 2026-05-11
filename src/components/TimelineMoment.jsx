@@ -35,8 +35,8 @@ export default function TimelineMoment({ moment, index, total }) {
           {moment.media?.length > 0 && (
             <div className="timeline-media-row">
               {moment.media.map((item, mediaIndex) => (
-                <button key={mediaIndex} className="video-card" aria-label={`Play ${item.title}`}>
-                  <span className="video-play">▶</span>
+                <button key={mediaIndex} type="button" className="video-card" aria-label={`Play ${item.title}`}>
+                  <span className="video-play" aria-hidden="true">▶</span>
                   <span className="video-copy">
                     <span>{item.title}</span>
                     <small>{item.meta}</small>

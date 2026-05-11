@@ -430,7 +430,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                     <div className="empty-meta">Verified twin Q&A · Voice optional</div>
                     <div className="voice-prompts compact">
                       {voicePrompts.map(prompt => (
-                        <button key={prompt.label} className="voice-chip" onClick={() => sendSuggestedPrompt(prompt.prompt)}>
+                        <button key={prompt.label} type="button" className="voice-chip" onClick={() => sendSuggestedPrompt(prompt.prompt)}>
                           <span aria-hidden="true">{prompt.icon}</span>
                           {prompt.label}
                         </button>
@@ -462,7 +462,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                 ) : (
                   <div className={mode === "narrator" && i === activeBeat ? "assistant-message narrator-active" : "assistant-message"}>
                     {mode === "narrator" ? (
-                      <button className="narrator-marker" onClick={() => selectNarratorBeat(i)} aria-label={`Play chapter ${i + 1}`}>
+                      <button type="button" className="narrator-marker" onClick={() => selectNarratorBeat(i)} aria-label={`Play chapter ${i + 1}`}>
                         <span>{msg.moment?.y}</span>
                       </button>
                     ) : (
@@ -470,7 +470,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                     )}
                     <div className="assistant-copy">
                       {mode === "narrator" && (
-                        <button className="narrator-chapter" onClick={() => selectNarratorBeat(i)}>
+                        <button type="button" className="narrator-chapter" onClick={() => selectNarratorBeat(i)}>
                           <span>{msg.moment?.era}</span>
                           {msg.moment?.title}
                         </button>
@@ -480,8 +480,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                       {mode === "narrator" && msg.media?.length > 0 && (
                         <div className="narrator-media-row">
                           {msg.media.map((item, mediaIndex) => (
-                            <button key={mediaIndex} className="video-card" aria-label={`Play ${item.title}`}>
-                              <span className="video-play">▶</span>
+                            <button key={mediaIndex} type="button" className="video-card" aria-label={`Play ${item.title}`}>
+                              <span className="video-play" aria-hidden="true">▶</span>
                               <span className="video-copy">
                                 <span>{item.title}</span>
                                 <small>{item.meta}</small>
@@ -526,6 +526,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                 />
               </div>
               <button
+                type="button"
                 className={`voice-button ${voiceState}`}
                 onClick={startVoiceInteraction}
                 disabled={loading && voiceState !== "speaking"}
@@ -534,6 +535,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                 <span aria-hidden="true">{voiceState === "speaking" ? "■" : "🎙"}</span>
               </button>
               <button
+                type="button"
                 className={voiceIsActive ? "send-icon-button stop-mode" : "send-icon-button"}
                 onClick={voiceIsActive ? stopVoiceInteraction : () => sendQA()}
                 disabled={!voiceIsActive && (loading || !input.trim())}
@@ -545,10 +547,10 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
           ) : (
             messages.length > 0 && !loading && (
               <div className="modal-composer narrator-actions">
-                <button className="secondary-button" onClick={continueNarrator}>
+                <button type="button" className="secondary-button" onClick={continueNarrator}>
                   <span aria-hidden="true">▶ </span>{activeBeat >= narratorBeats.length - 1 ? "Restart story" : "Continue the story"}
                 </button>
-                <button className="secondary-button" onClick={() => switchMode("qa")}>
+                <button type="button" className="secondary-button" onClick={() => switchMode("qa")}>
                   <span aria-hidden="true">✦ </span>Switch to Q&A
                 </button>
               </div>

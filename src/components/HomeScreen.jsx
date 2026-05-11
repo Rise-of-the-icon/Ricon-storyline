@@ -64,7 +64,7 @@ export default function HomeScreen({ onSelect }) {
       </nav>
 
       <main>
-      <section className={`hero landing-hero ${hero.isSports ? "landing-hero-sports" : "landing-hero-music"}`} aria-labelledby="home-title">
+        <section className={`hero landing-hero ${hero.isSports ? "landing-hero-sports" : "landing-hero-music"}`} aria-labelledby="home-title">
         <div className="hero-kicker">
           Every legend has a story. Every story has a truth.
         </div>
@@ -78,16 +78,16 @@ export default function HomeScreen({ onSelect }) {
           Choose a category. Begin the journey.
         </div>
         <div className="hero-actions">
-          <button className="primary-button premium-button cta-glow" onClick={() => setFilter("nba")}>
+          <button type="button" className="primary-button premium-button cta-glow" onClick={() => setFilter("nba")}>
             <span aria-hidden="true">◉ </span>EXPLORE SPORTS
           </button>
-          <button className="secondary-button music-action" onClick={() => setFilter("hiphop")}>
+          <button type="button" className="secondary-button music-action" onClick={() => setFilter("hiphop")}>
             <span aria-hidden="true">♪ </span>EXPLORE MUSIC
           </button>
         </div>
       </section>
 
-      <nav className="category-nav" aria-label="Story categories">
+        <nav className="category-nav" aria-label="Story categories">
         <div className="category-nav-inner">
           <button
             type="button"
@@ -126,20 +126,20 @@ export default function HomeScreen({ onSelect }) {
             ))}
           </div>
         </div>
-      </nav>
+        </nav>
 
       {filter === "all" && (
-        <section className="featured-section" aria-labelledby="featured-stories-title">
+          <section className="featured-section" aria-labelledby="featured-stories-title">
           <h2 id="featured-stories-title" className="section-kicker">FEATURED STORIES</h2>
           <div className="featured-grid">
             {FEATURED_PICKS.map((legend, i) => (
               <FeaturedStoryCard key={legend.id} legend={legend} delay={i * 80} onClick={() => onSelect(legend)} />
             ))}
           </div>
-        </section>
+          </section>
       )}
 
-      <section className="browse-section" aria-labelledby="browse-stories-title">
+        <section className="browse-section" aria-labelledby="browse-stories-title">
         <div className="browse-heading">
           <h2 id="browse-stories-title" className="section-kicker">
             {filter === "all" ? "ALL LEGENDS" : `${activeFilter.label} LEGENDS`}
@@ -151,7 +151,7 @@ export default function HomeScreen({ onSelect }) {
         <div className="athlete-grid">
           {filteredLegends.map((a, i) => <AthleteCard key={a.id} athlete={a} delay={i * 50} onClick={() => onSelect(a)} />)}
         </div>
-      </section>
+        </section>
       </main>
 
       <div className="app-footer">

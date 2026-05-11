@@ -54,6 +54,7 @@ const CSS = `
   @keyframes ringA { 0%,100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.06); opacity: 0.45; } }
   @keyframes ringB { 0%,100% { transform: scale(1); opacity: 0.38; } 50% { transform: scale(1.14); opacity: 0.14; } }
   @keyframes dot { 0%,60%,100% { transform: scale(1); opacity: 1; } 30% { transform: scale(1.45); opacity: 0.42; } }
+  @keyframes pulse { 0%,100% { transform: scale(1); opacity: 0.78; } 50% { transform: scale(1.35); opacity: 0.42; } }
   @keyframes premiumGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(201, 165, 77, 0); } 50% { box-shadow: 0 0 28px 6px rgba(201, 165, 77, 0.18); } }
 
   .ricon-root { min-height: 100vh; overflow-x: hidden; background: radial-gradient(circle at 15% 0%, rgba(124, 108, 255, 0.18), transparent 34%), radial-gradient(circle at 88% 12%, rgba(96, 165, 250, 0.16), transparent 30%), var(--background); color: var(--foreground); font-family: var(--font-sans); }
@@ -120,7 +121,7 @@ const CSS = `
   .athlete-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; padding: 0 32px 80px; }
   .app-footer { padding: 28px 40px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; color: var(--muted-foreground); font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
 
-  .card-root { cursor: pointer; position: relative; overflow: hidden; min-height: 250px; display: flex; flex-direction: column; justify-content: flex-end; padding: 28px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: linear-gradient(180deg, color-mix(in srgb, var(--card) 92%, var(--primary) 8%), var(--card)); box-shadow: var(--shadow-soft); transition: transform var(--motion-standard) var(--ease-out), border-color var(--motion-standard), box-shadow var(--motion-standard), background var(--motion-standard); }
+  .card-root { cursor: pointer; position: relative; overflow: hidden; min-height: 250px; display: flex; flex-direction: column; justify-content: flex-end; padding: 28px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: linear-gradient(180deg, color-mix(in srgb, var(--card) 92%, var(--primary) 8%), var(--card)); color: var(--foreground); text-align: left; box-shadow: var(--shadow-soft); transition: transform var(--motion-standard) var(--ease-out), border-color var(--motion-standard), box-shadow var(--motion-standard), background var(--motion-standard); }
   .card-root:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--primary) 48%, var(--border)); box-shadow: var(--shadow-medium); }
   .card-root:hover .card-tagline { color: var(--card-foreground); }
   .card-root:hover .card-explore { opacity: 1; transform: translateY(0); }
@@ -296,7 +297,7 @@ const CSS = `
 
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
-    *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+    *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
   }
 
 `;
