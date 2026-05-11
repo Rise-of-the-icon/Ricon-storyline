@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useId, useRef } from "react";
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -128,9 +128,57 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
   const inputRef = useRef(null);
   const bottomRef = useRef(null);
   const modeRef = useRef(null);
+  const modalRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  const previousActiveElement = useRef(null);
+  const onCloseRef = useRef(onClose);
+  const titleId = useId();
+  const descriptionId = useId();
   const figmaTwinMode = new URLSearchParams(window.location.search).get("figmaTwin");
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    previousActiveElement.current = document.activeElement;
+    window.requestAnimationFrame(() => {
+      if (mode === "qa") inputRef.current?.focus();
+      else closeButtonRef.current?.focus();
+    });
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== "Tab" || !modalRef.current) return;
+
+      const focusable = Array.from(
+        modalRef.current.querySelectorAll(
+          'button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      previousActiveElement.current?.focus?.();
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -314,29 +362,42 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
   const voiceIsActive = voiceState === "listening" || voiceState === "thinking" || voiceState === "speaking";
 
   return (
-    <div className="modal-root">
+    <div
+      ref={modalRef}
+      className="modal-root"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
+    >
       <div className="modal-header">
         <div>
-          <div className="modal-status">◉ Digital Twin · Verified Data</div>
-          <div className="modal-title">{athlete.name}</div>
+          <div id={descriptionId} className="modal-status"><span aria-hidden="true">◉ </span>Digital Twin · Verified Data</div>
+          <h2 id={titleId} className="modal-title">{athlete.name}</h2>
         </div>
         <div className="nav-spacer" />
         <div className="mode-toggle">
           {["narrator", "qa"].map(m => (
-            <button key={m} onClick={() => switchMode(m)} className={mode === m ? "mode-button mode-btn-active" : "mode-button"}>
-              {m === "narrator" ? "▶ Narrator" : "✦ Q&A"}
+            <button
+              key={m}
+              type="button"
+              onClick={() => switchMode(m)}
+              className={mode === m ? "mode-button mode-btn-active" : "mode-button"}
+              aria-pressed={mode === m}
+            >
+              {m === "narrator" ? <><span aria-hidden="true">▶ </span>Narrator</> : <><span aria-hidden="true">✦ </span>Q&A</>}
             </button>
           ))}
         </div>
-        <button className="close-button" onClick={onClose}>Close ✕</button>
+        <button ref={closeButtonRef} type="button" className="close-button" onClick={onClose}>Close <span aria-hidden="true">✕</span></button>
       </div>
 
       <div className="modal-layout">
         <div className="twin-rail">
           <div className="avatar-wrap">
-            <div className="avatar-ring outer ring-b" />
-            <div className="avatar-ring mid ring-a" />
-            <div className="avatar-ring inner ring-a" />
+            <div className="avatar-ring outer ring-b" aria-hidden="true" />
+            <div className="avatar-ring mid ring-a" aria-hidden="true" />
+            <div className="avatar-ring inner ring-a" aria-hidden="true" />
             <div className={loading ? "avatar-core loading" : "avatar-core"}>
               {athlete.headshot && (
                 <img className="avatar-headshot" src={athlete.headshot} alt={`${athlete.name} headshot`} />
@@ -345,8 +406,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
             </div>
           </div>
           <div className="twin-state">
-            <div className={loading ? "twin-state-label loading" : "twin-state-label"}>
-              {loading ? "◉ Speaking..." : "● Ready"}
+            <div className={loading ? "twin-state-label loading" : "twin-state-label"} aria-live="polite">
+              {loading ? <><span aria-hidden="true">◉ </span>Speaking...</> : <><span aria-hidden="true">● </span>Ready</>}
             </div>
             <div className="twin-version">Verified Twin v1.0</div>
           </div>
@@ -361,7 +422,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
         </div>
 
         <div className="modal-main">
-          <div className="messages">
+          <div className="messages" aria-live={mode === "qa" ? "polite" : "off"} aria-busy={loading}>
               {messages.length === 0 && !loading && !voiceIsActive && (
                 mode === "qa" ? (
                   <div className="qa-empty-state">
@@ -370,7 +431,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                     <div className="voice-prompts compact">
                       {voicePrompts.map(prompt => (
                         <button key={prompt.label} className="voice-chip" onClick={() => sendSuggestedPrompt(prompt.prompt)}>
-                          <span>{prompt.icon}</span>
+                          <span aria-hidden="true">{prompt.icon}</span>
                           {prompt.label}
                         </button>
                       ))}
@@ -385,7 +446,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
 
               {mode === "qa" && voiceIsActive && (
                 <div className="voice-status-card">
-                  <span className={voiceIsActive ? "live-dot active" : "live-dot"} />
+                  <span className={voiceIsActive ? "live-dot active" : "live-dot"} aria-hidden="true" />
                   {voiceState === "listening" && "Listening. Ask naturally."}
                   {voiceState === "thinking" && "Checking verified records."}
                   {voiceState === "speaking" && "Speaking response."}
@@ -415,7 +476,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                         </button>
                       )}
                       <div className="assistant-text">{msg.content}</div>
-                      <div className="verified-meta">✓ Verified twin response</div>
+                      <div className="verified-meta"><span aria-hidden="true">✓ </span>Verified twin response</div>
                       {mode === "narrator" && msg.media?.length > 0 && (
                         <div className="narrator-media-row">
                           {msg.media.map((item, mediaIndex) => (
@@ -440,7 +501,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                 <div className="assistant-avatar">{athlete.initials}</div>
                 <div className="typing">
                   {[0, 1, 2].map(i => (
-                    <div key={i} className="typing-dot" style={{ animationDelay: `${i * 0.2}s` }} />
+                    <div key={i} className="typing-dot" style={{ animationDelay: `${i * 0.2}s` }} aria-hidden="true" />
                   ))}
                 </div>
               </div>
@@ -453,6 +514,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
             <div className="modal-composer voice-dock">
               <div className="dock-input-wrap">
                 <input
+                  id="twin-question-input"
                   ref={inputRef}
                   className="twin-input"
                   value={input}
@@ -460,6 +522,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                   onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendQA())}
                   placeholder={`Ask ${athlete.name.split(" ")[0]}...`}
                   disabled={loading}
+                  aria-label={`Ask ${athlete.name} a question`}
                 />
               </div>
               <button
@@ -468,7 +531,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                 disabled={loading && voiceState !== "speaking"}
                 aria-label={voiceState === "speaking" ? "Stop voice playback" : "Start voice interaction"}
               >
-                <span>{voiceState === "speaking" ? "■" : "🎙"}</span>
+                <span aria-hidden="true">{voiceState === "speaking" ? "■" : "🎙"}</span>
               </button>
               <button
                 className={voiceIsActive ? "send-icon-button stop-mode" : "send-icon-button"}
@@ -476,17 +539,17 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                 disabled={!voiceIsActive && (loading || !input.trim())}
                 aria-label={voiceIsActive ? "Exit voice mode" : "Send message"}
               >
-                {voiceIsActive ? "×" : "→"}
+                <span aria-hidden="true">{voiceIsActive ? "×" : "→"}</span>
               </button>
             </div>
           ) : (
             messages.length > 0 && !loading && (
               <div className="modal-composer narrator-actions">
                 <button className="secondary-button" onClick={continueNarrator}>
-                  ▶ {activeBeat >= narratorBeats.length - 1 ? "Restart story" : "Continue the story"}
+                  <span aria-hidden="true">▶ </span>{activeBeat >= narratorBeats.length - 1 ? "Restart story" : "Continue the story"}
                 </button>
                 <button className="secondary-button" onClick={() => switchMode("qa")}>
-                  ✦ Switch to Q&A
+                  <span aria-hidden="true">✦ </span>Switch to Q&A
                 </button>
               </div>
             )
