@@ -10,7 +10,7 @@ export default function AthleteScreen({ athlete, onBack, onTwin }) {
   const firstName = athlete.name.split(" ")[0].replace(/^The$/, athlete.name.split(" ")[1] || "legend");
 
   return (
-    <div className="animate-page-enter">
+    <div>
       <nav className="app-nav sticky" aria-label={`${athlete.name} story`}>
         <button type="button" className="ghost-button" onClick={onBack}>
           <span aria-hidden="true">← </span>BROWSE
@@ -20,7 +20,7 @@ export default function AthleteScreen({ athlete, onBack, onTwin }) {
         {categoryLabel && <span className="nav-context">{categoryLabel}</span>}
         <div className="nav-spacer" />
         <button type="button" className="primary-button premium-button cta-glow" onClick={() => onTwin("narrator")}>
-          <span aria-hidden="true">◉ </span>ACTIVATE DIGITAL TWIN
+          <span aria-hidden="true">◉ </span>Ask {firstName} a Question
         </button>
       </nav>
 
@@ -40,6 +40,15 @@ export default function AthleteScreen({ athlete, onBack, onTwin }) {
         <h1 className="athlete-name">
           {athlete.name}
         </h1>
+        <div className="profile-trust-badge">
+          <div className="profile-trust-title">
+            <span aria-hidden="true">✓</span>
+            Verified by RICON
+          </div>
+          <div className="profile-trust-copy">
+            Built from cited archival sources and editorial review
+          </div>
+        </div>
         <div className="athlete-tagline">
           "{athlete.tagline}"
         </div>
@@ -63,7 +72,7 @@ export default function AthleteScreen({ athlete, onBack, onTwin }) {
         </div>
         <div className="button-row">
           <button type="button" className="primary-button" onClick={() => onTwin("narrator")}><span aria-hidden="true">▶ </span>NARRATOR</button>
-          <button type="button" className="secondary-button" onClick={() => onTwin("qa")}><span aria-hidden="true">✦ </span>ASK ME ANYTHING</button>
+          <button type="button" className="secondary-button" onClick={() => onTwin("qa")}><span aria-hidden="true">✦ </span>Ask {firstName} a Question</button>
         </div>
       </div>
 
@@ -80,7 +89,7 @@ export default function AthleteScreen({ athlete, onBack, onTwin }) {
       <div className="closing-cta">
         <div className="closing-copy">The story doesn't end here.</div>
         <button type="button" className="secondary-button" onClick={() => onTwin("qa")}>
-          ASK THE DIGITAL TWIN <span aria-hidden="true">→</span>
+          Ask {firstName} a Question <span aria-hidden="true">→</span>
         </button>
       </div>
       </main>

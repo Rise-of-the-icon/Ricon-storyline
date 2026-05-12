@@ -1,6 +1,7 @@
 import { useState, useEffect, useId, useRef } from "react";
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const STREAM_ERROR_MESSAGE = "This moment is unavailable from the verified archive. Try a different question.";
 
 const clean = (value) => value.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
 const STOP_WORDS = new Set(["what", "when", "where", "your", "were", "with", "that", "this", "from", "about", "moment"]);
@@ -101,6 +102,14 @@ const answerQuestion = (athlete, question) => {
   return `That's beyond what I can speak to with certainty, but what I lived and what's documented, I can tell you. In ${moment.y}, ${moment.title}. ${moment.body}`;
 };
 
+const streamText = async (text, onToken) => {
+  const tokens = text.match(/\S+\s*/g) || [];
+  for (const token of tokens) {
+    await wait(28);
+    onToken(token);
+  }
+};
+
 const qaCaptureMessages = (athlete) => [
   { role: "user", content: "What day is it?" },
   { role: "assistant", content: answerQuestion(athlete, "What day is it?") },
@@ -116,12 +125,24 @@ const voicePrompts = [
   { icon: "◇", label: "Explain the legacy", prompt: "How should people understand your legacy?" },
 ];
 
-export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
+export const OPENING_NARRATIVE_PROMPT = "Begin the story of your career from the beginning, in one paragraph.";
+
+export const prewarmOpeningNarrative = async (athlete) => {
+  await wait(650);
+  return {
+    ...buildNarratorMessage(athlete, 0),
+    prompt: OPENING_NARRATIVE_PROMPT,
+    prewarmed: true,
+  };
+};
+
+export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewarmedNarrative }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeBeat, setActiveBeat] = useState(0);
   const [voiceState, setVoiceState] = useState("idle");
+  const [voiceSessionActive, setVoiceSessionActive] = useState(false);
   const narratorIndex = useRef(0);
   const voiceTimer = useRef(null);
   const recognitionRef = useRef(null);
@@ -200,12 +221,20 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
     utterance.pitch = 0.82;
     utterance.volume = 0.9;
     utterance.onstart = () => setVoiceState("speaking");
-    utterance.onend = () => setVoiceState("idle");
-    utterance.onerror = () => setVoiceState("idle");
+    utterance.onend = () => { setVoiceState("idle"); setVoiceSessionActive(false); };
+    utterance.onerror = () => { setVoiceState("idle"); setVoiceSessionActive(false); };
     window.speechSynthesis.speak(utterance);
   };
 
   const triggerNarrator = async () => {
+    if (prewarmedNarrative) {
+      setLoading(false);
+      narratorIndex.current = 0;
+      setActiveBeat(0);
+      setMessages([{ ...prewarmedNarrative, prewarmed: true }]);
+      return;
+    }
+
     setLoading(true);
     narratorIndex.current = 0;
     setActiveBeat(0);
@@ -252,12 +281,35 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
     setMessages(p => [...p, userMsg]);
     setInput("");
     setLoading(true);
-    await wait(700);
-    const reply = answerQuestion(athlete, question);
-    setMessages(p => [...p, { role: "assistant", content: reply }]);
-    setLoading(false);
-    if (speakResponse) speakReply(reply);
-    else setVoiceState("idle");
+    const assistantIndex = messages.length + 1;
+    setMessages(p => [...p, { role: "assistant", content: "", streaming: true }]);
+
+    try {
+      const reply = answerQuestion(athlete, question);
+      let streamedReply = "";
+      await streamText(reply, (token) => {
+        streamedReply += token;
+        setMessages(p => p.map((msg, index) => (
+          index === assistantIndex ? { ...msg, content: streamedReply } : msg
+        )));
+      });
+      setMessages(p => p.map((msg, index) => (
+        index === assistantIndex ? { ...msg, content: streamedReply, streaming: false } : msg
+      )));
+      setLoading(false);
+      if (speakResponse) speakReply(streamedReply);
+      else {
+        setVoiceState("idle");
+        setVoiceSessionActive(false);
+      }
+    } catch {
+      setMessages(p => p.map((msg, index) => (
+        index === assistantIndex ? { role: "assistant", content: STREAM_ERROR_MESSAGE, streaming: false, error: true } : msg
+      )));
+      setLoading(false);
+      setVoiceState("idle");
+      setVoiceSessionActive(false);
+    }
   };
 
   const sendSuggestedPrompt = (prompt) => {
@@ -271,10 +323,12 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
     if (voiceState === "speaking") {
       window.speechSynthesis?.cancel();
       setVoiceState("idle");
+      setVoiceSessionActive(false);
       return;
     }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    setVoiceSessionActive(true);
     setVoiceState("listening");
     if (voiceTimer.current) window.clearTimeout(voiceTimer.current);
 
@@ -301,6 +355,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
     };
     recognition.onerror = () => {
       setVoiceState("idle");
+      setVoiceSessionActive(false);
       inputRef.current?.focus();
     };
     recognition.onend = () => {
@@ -308,6 +363,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
       recognitionRef.current = null;
       if (!question) {
         setVoiceState("idle");
+        setVoiceSessionActive(false);
         return;
       }
       setVoiceState("thinking");
@@ -318,6 +374,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
     } catch {
       recognitionRef.current = null;
       setVoiceState("idle");
+      setVoiceSessionActive(false);
       inputRef.current?.focus();
     }
   };
@@ -331,6 +388,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
     recognitionRef.current = null;
     window.speechSynthesis?.cancel();
     setVoiceState("idle");
+    setVoiceSessionActive(false);
     setLoading(false);
   };
 
@@ -339,6 +397,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
     modeRef.current = m;
     setMessages([]);
     setVoiceState("idle");
+    setVoiceSessionActive(false);
     window.speechSynthesis?.cancel();
     onSwitchMode(m);
     if (m === "narrator") setTimeout(triggerNarrator, 50);
@@ -359,7 +418,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
     if (mode === "narrator") triggerNarrator();
   }, []);
 
-  const voiceIsActive = voiceState === "listening" || voiceState === "thinking" || voiceState === "speaking";
+  const voiceIsActive = voiceSessionActive || voiceState === "listening" || voiceState === "thinking" || voiceState === "speaking";
 
   return (
     <div
@@ -409,7 +468,6 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
             <div className={loading ? "twin-state-label loading" : "twin-state-label"} aria-live="polite">
               {loading ? <><span aria-hidden="true">◉ </span>Speaking...</> : <><span aria-hidden="true">● </span>Ready</>}
             </div>
-            <div className="twin-version">Verified Twin v1.0</div>
           </div>
           <div className="rail-stats">
             {athlete.stats.slice(0, 2).map((s, i) => (
@@ -426,8 +484,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
               {messages.length === 0 && !loading && !voiceIsActive && (
                 mode === "qa" ? (
                   <div className="qa-empty-state">
-                    <div className="empty-title">Ask {athlete.name.split(" ")[0]} anything.</div>
-                    <div className="empty-meta">Verified twin Q&A · Voice optional</div>
+                    <div className="empty-title">Ask from the verified archive</div>
+                    <div className="empty-meta">Every response draws from documented moments, cited sources, and verified records.</div>
                     <div className="voice-prompts compact">
                       {voicePrompts.map(prompt => (
                         <button key={prompt.label} type="button" className="voice-chip" onClick={() => sendSuggestedPrompt(prompt.prompt)}>
@@ -454,7 +512,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
               )}
 
             {messages.map((msg, i) => (
-              <div key={i} className={mode === "narrator" ? "message narrator-beat" : "message"}>
+              <div key={i} className={`${mode === "narrator" ? "message narrator-beat" : "message"}${msg.prewarmed ? " prewarm-fade" : ""}`}>
                 {msg.role === "user" ? (
                   <div className="user-message">
                     <div className="user-bubble">{msg.content}</div>
@@ -475,8 +533,11 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                           {msg.moment?.title}
                         </button>
                       )}
-                      <div className="assistant-text">{msg.content}</div>
-                      <div className="verified-meta"><span aria-hidden="true">✓ </span>Verified twin response</div>
+                      <div className={msg.error ? "assistant-text stream-error" : "assistant-text"}>
+                        {msg.content}
+                        {msg.streaming && <span className="stream-cursor" aria-hidden="true">|</span>}
+                      </div>
+                      {!msg.error && <div className="verified-meta"><span aria-hidden="true">✓ </span>Verified twin response</div>}
                       {mode === "narrator" && msg.media?.length > 0 && (
                         <div className="narrator-media-row">
                           {msg.media.map((item, mediaIndex) => (
@@ -496,7 +557,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
               </div>
             ))}
 
-            {loading && (
+            {loading && mode !== "qa" && (
               <div className="assistant-message" style={{ animation: "fadeIn 0.3s ease" }}>
                 <div className="assistant-avatar">{athlete.initials}</div>
                 <div className="typing">
@@ -520,7 +581,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode }) {
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), sendQA())}
-                  placeholder={`Ask ${athlete.name.split(" ")[0]}...`}
+                  placeholder="Ask from the verified archive"
                   disabled={loading}
                   aria-label={`Ask ${athlete.name} a question`}
                 />

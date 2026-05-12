@@ -54,28 +54,27 @@ export default function HomeScreen({ onSelect }) {
   const musicFilters = FILTERS.filter((item) => item.type === "music");
 
   return (
-    <div className="animate-page-enter">
+    <div>
       <nav className="app-nav" aria-label="Primary">
         <span className="brand-mark">RICON</span>
         <div className="nav-divider" />
         <span className="brand-submark">Storyline</span>
         <div className="nav-spacer" />
-        <div className="status-pill">POC - Investor Demo 2026</div>
       </nav>
 
       <main>
-        <section className={`hero landing-hero ${hero.isSports ? "landing-hero-sports" : "landing-hero-music"}`} aria-labelledby="home-title">
+        <section id="how-it-works" className={`hero landing-hero ${hero.isSports ? "landing-hero-sports" : "landing-hero-music"}`} aria-labelledby="home-title">
         <div className="hero-kicker">
-          Every legend has a story. Every story has a truth.
+          Meet the verified AI twins of the legends who shaped sports and culture.
         </div>
         <div className="hero-rotator-label">
-          {hero.label}
+          Every legend has a story. Every story has a truth.
         </div>
         <h1 id="home-title" className={`hero-title hero-rotator-title ${heroVisible ? "is-visible" : "is-hidden"}`}>
           {hero.name}
         </h1>
         <div className="hero-copy">
-          Choose a category. Begin the journey.
+          Ask questions. Relive iconic moments. Unlock stories built from verified archives.
         </div>
         <div className="hero-actions">
           <button type="button" className="primary-button premium-button cta-glow" onClick={() => setFilter("nba")}>
@@ -128,7 +127,8 @@ export default function HomeScreen({ onSelect }) {
         </div>
         </nav>
 
-      {filter === "all" && (
+        <span id="verified-stories" aria-hidden="true" />
+        {filter === "all" && (
           <section className="featured-section" aria-labelledby="featured-stories-title">
           <h2 id="featured-stories-title" className="section-kicker">FEATURED STORIES</h2>
           <div className="featured-grid">
@@ -139,7 +139,7 @@ export default function HomeScreen({ onSelect }) {
           </section>
       )}
 
-        <section className="browse-section" aria-labelledby="browse-stories-title">
+        <section id="explore" className="browse-section" aria-labelledby="browse-stories-title">
         <div className="browse-heading">
           <h2 id="browse-stories-title" className="section-kicker">
             {filter === "all" ? "ALL LEGENDS" : `${activeFilter.label} LEGENDS`}
