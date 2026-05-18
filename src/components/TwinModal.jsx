@@ -1,4 +1,5 @@
 import { useState, useEffect, useId, useRef } from "react";
+const API_BASE = import.meta.env.VITE_TWIN_API_URL || "https://88a76206-45e9-48d4-9867-2fbd2929621f-00-3rtrqwkolv89j.riker.replit.dev";
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const STREAM_ERROR_MESSAGE = "This moment is unavailable from the verified archive. Try a different question.";
@@ -146,6 +147,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   const narratorIndex = useRef(0);
   const voiceTimer = useRef(null);
   const recognitionRef = useRef(null);
+  const audioRef = useRef(null);
   const inputRef = useRef(null);
   const bottomRef = useRef(null);
   const modeRef = useRef(null);
@@ -156,6 +158,31 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   const titleId = useId();
   const descriptionId = useId();
   const figmaTwinMode = new URLSearchParams(window.location.search).get("figmaTwin");
+
+  const playNarratorAudio = async (text, beatIndex = null) => {
+    try {
+      setVoiceState("loading");
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+
+      // POC: serve from public/ folder (production: swap to CDN URL)
+      const audioSrc = beatIndex !== null
+        ? `/beat_${beatIndex}.mp3`
+        : `${API_BASE}/twin/speak`;
+
+      const audio = new Audio(audioSrc);
+      audioRef.current = audio;
+      audio.onplay = () => setVoiceState("speaking");
+      audio.onended = () => setVoiceState("idle");
+      audio.onerror = () => setVoiceState("idle");
+      await audio.play();
+    } catch (e) {
+      console.error("Narrator audio failed:", e);
+      setVoiceState("idle");
+    }
+  };
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
@@ -206,6 +233,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
       if (voiceTimer.current) window.clearTimeout(voiceTimer.current);
       recognitionRef.current?.abort?.();
       window.speechSynthesis?.cancel();
+      audioRef.current?.pause?.();
     };
   }, []);
 
@@ -232,6 +260,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
       narratorIndex.current = 0;
       setActiveBeat(0);
       setMessages([{ ...prewarmedNarrative, prewarmed: true }]);
+      playNarratorAudio(prewarmedNarrative.content, 0);
       return;
     }
 
@@ -239,8 +268,10 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     narratorIndex.current = 0;
     setActiveBeat(0);
     await wait(650);
-    setMessages([buildNarratorMessage(athlete, 0)]);
+    const firstBeat = buildNarratorMessage(athlete, 0);
+    setMessages([firstBeat]);
     setLoading(false);
+    playNarratorAudio(firstBeat.content, 0);
   };
 
   const continueNarrator = async () => {
@@ -249,63 +280,96 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     const nextIndex = narratorIndex.current >= narratorBeats.length - 1 ? 0 : narratorIndex.current + 1;
     narratorIndex.current = nextIndex;
     setActiveBeat(nextIndex);
+    const nextBeat = buildNarratorMessage(athlete, nextIndex);
     setMessages(p => {
       if (p[nextIndex]) return p;
-      return [...p, buildNarratorMessage(athlete, nextIndex)];
+      return [...p, nextBeat];
     });
     setLoading(false);
+    playNarratorAudio(nextBeat.content, nextIndex);
   };
 
   const selectNarratorBeat = async (index) => {
     if (loading) return;
     setActiveBeat(index);
     narratorIndex.current = index;
-    if (messages[index]) return;
+    if (messages[index]) {
+      playNarratorAudio(messages[index].content, index);
+      return;
+    }
     setLoading(true);
     await wait(420);
     narratorIndex.current = Math.max(narratorIndex.current, index);
+    let targetBeat = null;
     setMessages(p => {
       const next = [...p];
       for (let i = 0; i <= index; i += 1) {
         if (!next[i]) next[i] = buildNarratorMessage(athlete, i);
       }
+      targetBeat = next[index];
       return next;
     });
     setLoading(false);
+    if (targetBeat) playNarratorAudio(targetBeat.content, index);
   };
 
   const sendQA = async (questionOverride, speakResponse = false) => {
     const question = (questionOverride ?? input).trim();
     if (!question || loading) return;
-    const userMsg = { role: "user", content: question };
-    setMessages(p => [...p, userMsg]);
+
+    setMessages(p => [...p, { role: "user", content: question }]);
     setInput("");
     setLoading(true);
+
     const assistantIndex = messages.length + 1;
     setMessages(p => [...p, { role: "assistant", content: "", streaming: true }]);
 
     try {
-      const reply = answerQuestion(athlete, question);
-      let streamedReply = "";
-      await streamText(reply, (token) => {
-        streamedReply += token;
-        setMessages(p => p.map((msg, index) => (
-          index === assistantIndex ? { ...msg, content: streamedReply } : msg
-        )));
+      // Wait for text + audio together, then show both simultaneously
+      const res = await fetch(`${API_BASE}/twin/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, athlete_id: athlete.id }),
       });
-      setMessages(p => p.map((msg, index) => (
-        index === assistantIndex ? { ...msg, content: streamedReply, streaming: false } : msg
-      )));
-      setLoading(false);
-      if (speakResponse) speakReply(streamedReply);
-      else {
-        setVoiceState("idle");
-        setVoiceSessionActive(false);
+      if (!res.ok) throw new Error("API error");
+      const { text, audio_base64 } = await res.json();
+
+      // Prepare audio before starting typewriter
+      let audio = null;
+      if (audio_base64) {
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        }
+        const bytes = Uint8Array.from(atob(audio_base64), c => c.charCodeAt(0));
+        const blob = new Blob([bytes], { type: "audio/wav" });
+        audio = new Audio(URL.createObjectURL(blob));
+        audioRef.current = audio;
       }
+
+      // Start typewriter + audio simultaneously
+      audio?.play();
+      let streamedReply = "";
+      await streamText(text, (token) => {
+        streamedReply += token;
+        setMessages(p => p.map((msg, i) =>
+          i === assistantIndex ? { ...msg, content: streamedReply } : msg
+        ));
+      });
+      setMessages(p => p.map((msg, i) =>
+        i === assistantIndex ? { ...msg, content: streamedReply, streaming: false } : msg
+      ));
+
+      setLoading(false);
+      setVoiceState("idle");
+      setVoiceSessionActive(false);
+
     } catch {
-      setMessages(p => p.map((msg, index) => (
-        index === assistantIndex ? { role: "assistant", content: STREAM_ERROR_MESSAGE, streaming: false, error: true } : msg
-      )));
+      setMessages(p => p.map((msg, i) =>
+        i === assistantIndex
+          ? { role: "assistant", content: STREAM_ERROR_MESSAGE, streaming: false, error: true }
+          : msg
+      ));
       setLoading(false);
       setVoiceState("idle");
       setVoiceSessionActive(false);
@@ -322,6 +386,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
 
     if (voiceState === "speaking") {
       window.speechSynthesis?.cancel();
+      audioRef.current?.pause?.();
       setVoiceState("idle");
       setVoiceSessionActive(false);
       return;
@@ -387,6 +452,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     }
     recognitionRef.current = null;
     window.speechSynthesis?.cancel();
+    audioRef.current?.pause?.();
     setVoiceState("idle");
     setVoiceSessionActive(false);
     setLoading(false);
@@ -399,6 +465,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     setVoiceState("idle");
     setVoiceSessionActive(false);
     window.speechSynthesis?.cancel();
+    audioRef.current?.pause?.();
     onSwitchMode(m);
     if (m === "narrator") setTimeout(triggerNarrator, 50);
   };
