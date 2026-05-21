@@ -1,5 +1,5 @@
 import { useState, useEffect, useId, useRef } from "react";
-const API_BASE = import.meta.env.VITE_TWIN_API_URL || "https://88a76206-45e9-48d4-9867-2fbd2929621f-00-3rtrqwkolv89j.riker.replit.dev";
+const API_BASE = import.meta.env.VITE_TWIN_API_URL || "https://ricon-storyline-production.up.railway.app";
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const STREAM_ERROR_MESSAGE = "This moment is unavailable from the verified archive. Try a different question.";
@@ -342,7 +342,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
           audioRef.current.currentTime = 0;
         }
         const bytes = Uint8Array.from(atob(audio_base64), c => c.charCodeAt(0));
-        const blob = new Blob([bytes], { type: "audio/wav" });
+        const blob = new Blob([bytes], { type: "audio/mp3" });
         audio = new Audio(URL.createObjectURL(blob));
         audioRef.current = audio;
       }
