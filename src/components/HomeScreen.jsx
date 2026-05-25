@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { FEATURED_HERO, FEATURED_PICKS, FILTERS, LEGENDS } from "../data/athletes";
+import { getFanExperienceSnapshot } from "../lib/fanExperience";
 import AthleteCard from "./AthleteCard";
+import FanNotificationBell from "./notifications/FanNotificationBell";
 
 function FeaturedStoryCard({ legend, delay, onClick }) {
   const label = legend.cat === "music" ? legend.genreLabel : legend.leagueLabel;
@@ -29,6 +32,8 @@ function FeaturedStoryCard({ legend, delay, onClick }) {
 }
 
 export default function HomeScreen({ onSelect }) {
+  const snapshot = getFanExperienceSnapshot();
+  const isSubscriber = snapshot.isSubscriber;
   const [heroIndex, setHeroIndex] = useState(0);
   const [heroVisible, setHeroVisible] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -54,27 +59,37 @@ export default function HomeScreen({ onSelect }) {
   const musicFilters = FILTERS.filter((item) => item.type === "music");
 
   return (
-    <div>
+    <div className="animate-page-enter">
       <nav className="app-nav" aria-label="Primary">
         <span className="brand-mark">RICON</span>
         <div className="nav-divider" />
         <span className="brand-submark">Storyline</span>
         <div className="nav-spacer" />
+        <FanNotificationBell />
+        {isSubscriber ? (
+          <Link to="/fan/home" className="primary-button premium-button">
+            <span aria-hidden="true">◉ </span>
+            Your Home
+          </Link>
+        ) : (
+          <Link to="/feed" className="ghost-button">Content Drops</Link>
+        )}
+        <div className="status-pill">POC - Investor Demo 2026</div>
       </nav>
 
       <main>
-        <section id="how-it-works" className={`hero landing-hero ${hero.isSports ? "landing-hero-sports" : "landing-hero-music"}`} aria-labelledby="home-title">
+        <section className={`hero landing-hero ${hero.isSports ? "landing-hero-sports" : "landing-hero-music"}`} aria-labelledby="home-title">
         <div className="hero-kicker">
-          Meet the verified AI twins of the legends who shaped sports and culture.
+          Every legend has a story. Every story has a truth.
         </div>
         <div className="hero-rotator-label">
-          Every legend has a story. Every story has a truth.
+          {hero.label}
         </div>
         <h1 id="home-title" className={`hero-title hero-rotator-title ${heroVisible ? "is-visible" : "is-hidden"}`}>
           {hero.name}
         </h1>
         <div className="hero-copy">
-          Ask questions. Relive iconic moments. Unlock stories built from verified archives.
+          Choose a category. Begin the journey.
         </div>
         <div className="hero-actions">
           <button type="button" className="primary-button premium-button cta-glow" onClick={() => setFilter("nba")}>
@@ -127,8 +142,7 @@ export default function HomeScreen({ onSelect }) {
         </div>
         </nav>
 
-        <span id="verified-stories" aria-hidden="true" />
-        {filter === "all" && (
+      {filter === "all" && (
           <section className="featured-section" aria-labelledby="featured-stories-title">
           <h2 id="featured-stories-title" className="section-kicker">FEATURED STORIES</h2>
           <div className="featured-grid">
@@ -139,7 +153,7 @@ export default function HomeScreen({ onSelect }) {
           </section>
       )}
 
-        <section id="explore" className="browse-section" aria-labelledby="browse-stories-title">
+        <section className="browse-section" aria-labelledby="browse-stories-title">
         <div className="browse-heading">
           <h2 id="browse-stories-title" className="section-kicker">
             {filter === "all" ? "ALL LEGENDS" : `${activeFilter.label} LEGENDS`}
