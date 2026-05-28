@@ -1,5 +1,7 @@
 import { useState, useEffect, useId, useRef } from "react";
 const API_BASE = import.meta.env.VITE_TWIN_API_URL || "https://ricon-storyline-production.up.railway.app";
+const WS_BASE  = (import.meta.env.VITE_TWIN_API_URL || "https://ricon-storyline-production.up.railway.app")
+  .replace("https://", "wss://").replace("http://", "ws://");
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const STREAM_ERROR_MESSAGE = "This moment is unavailable from the verified archive. Try a different question.";
@@ -147,7 +149,15 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   const narratorIndex = useRef(0);
   const voiceTimer = useRef(null);
   const recognitionRef = useRef(null);
-  const audioRef = useRef(null);
+  const audioRef    = useRef(null);
+  const wsRef       = useRef(null);
+  const audioCtxRef = useRef(null);
+  const nextPlayRef = useRef(0);
+  const wsReadyRef  = useRef(false);
+  const currentMsgRef = useRef({ index: null, buffer: "", audioStarted: false });
+  const pendingQuestionRef = useRef(null);
+  const responseTimerRef = useRef(null);
+  const heartbeatRef = useRef(null);
   const inputRef = useRef(null);
   const bottomRef = useRef(null);
   const modeRef = useRef(null);
@@ -182,6 +192,170 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
       console.error("Narrator audio failed:", e);
       setVoiceState("idle");
     }
+  };
+
+  // ── Web Audio API for streaming PCM16 chunks ─────────────────────
+  const initAudioCtx = () => {
+    if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+      audioCtxRef.current = new AudioContext({ sampleRate: 24000 });
+      nextPlayRef.current = 0;
+    }
+  };
+
+  const playPCM16Chunk = (base64Audio) => {
+    initAudioCtx();
+    const ctx = audioCtxRef.current;
+    const bytes = Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0));
+    const pcm16 = new Int16Array(bytes.buffer);
+    const buf   = ctx.createBuffer(1, pcm16.length, 24000);
+    const f32   = buf.getChannelData(0);
+    for (let i = 0; i < pcm16.length; i++) f32[i] = pcm16[i] / 32768;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    const t = Math.max(ctx.currentTime, nextPlayRef.current);
+    nextPlayRef.current = t + buf.duration;
+    src.start(t);
+  };
+
+  const stopStreamingAudio = () => {
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close();
+      audioCtxRef.current = null;
+    }
+    nextPlayRef.current = 0;
+  };
+
+  const sendQAFallbackREST = async (question, idx) => {
+    try {
+      const res = await fetch(`${API_BASE}/twin/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, athlete_id: athlete.id }),
+      });
+      if (!res.ok) throw new Error("REST fallback failed");
+      const { audio_base64 } = await res.json();
+      if (audio_base64) {
+        if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
+        const bytes = Uint8Array.from(atob(audio_base64), c => c.charCodeAt(0));
+        const blob  = new Blob([bytes], { type: "audio/mp3" });
+        const audio = new Audio(URL.createObjectURL(blob));
+        audioRef.current = audio;
+        audio.play().catch(() => {});
+      }
+      setMessages(p => p.map((m, i) => i === idx ? { ...m, content: "", streaming: false } : m));
+    } catch (e) {
+      console.error("REST fallback failed:", e);
+      setMessages(p => p.map((m, i) => i === idx ? { role: "assistant", content: STREAM_ERROR_MESSAGE, streaming: false, error: true } : m));
+    } finally {
+      setLoading(false);
+      setVoiceState("idle");
+      setVoiceSessionActive(false);
+    }
+  };
+
+  const finalizeCurrent = (isError = false) => {
+    const cur = currentMsgRef.current;
+    if (cur.index === null) return;
+    const idx = cur.index;
+    const question = cur.question;
+    if (responseTimerRef.current) { clearTimeout(responseTimerRef.current); responseTimerRef.current = null; }
+    currentMsgRef.current = { index: null, buffer: "", audioStarted: false, question: null };
+
+    if (isError && question) {
+      console.warn("Realtime failed — falling back to REST");
+      sendQAFallbackREST(question, idx);
+      return;
+    }
+    setMessages(p => p.map((m, i) =>
+      i === idx
+        ? (isError
+            ? { role: "assistant", content: STREAM_ERROR_MESSAGE, streaming: false, error: true }
+            : { ...m, content: "", streaming: false })
+        : m
+    ));
+    setLoading(false);
+    setVoiceState("idle");
+    setVoiceSessionActive(false);
+  };
+
+  const handleRealtimeEvent = (msg) => {
+    const t = msg.type;
+
+    if (t === "ready") {
+      wsReadyRef.current = true;
+      if (pendingQuestionRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "question", text: pendingQuestionRef.current }));
+        pendingQuestionRef.current = null;
+        startResponseTimer();
+      }
+      return;
+    }
+
+    const cur = currentMsgRef.current;
+    if (cur.index === null) return;
+
+    if (t === "response.output_audio.delta") {
+      if (responseTimerRef.current) { clearTimeout(responseTimerRef.current); responseTimerRef.current = null; }
+      playPCM16Chunk(msg.delta);
+    }
+    else if (t === "response.done") {
+      finalizeCurrent(""); // voice-only — no text shown
+    }
+    else if (t === "error") {
+      finalizeCurrent(true);
+    }
+  };
+
+  const startResponseTimer = () => {
+    if (responseTimerRef.current) return;
+    responseTimerRef.current = setTimeout(() => {
+      console.warn("Response timeout");
+      responseTimerRef.current = null;
+      finalizeCurrent(true);
+    }, 25000);
+  };
+
+  const openRealtimeWS = () => {
+    if (wsRef.current &&
+        (wsRef.current.readyState === WebSocket.OPEN ||
+         wsRef.current.readyState === WebSocket.CONNECTING)) return;
+    wsReadyRef.current = false;
+    const socket = new WebSocket(`${WS_BASE}/twin/ws`);
+    wsRef.current = socket;
+    socket.onopen  = () => {
+      console.log("✓ Realtime WS connected");
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      heartbeatRef.current = setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "ping" }));
+        }
+      }, 30000);
+    };
+    socket.onclose = () => {
+      if (wsRef.current === socket) {
+        wsReadyRef.current = false;
+        wsRef.current = null;
+        // If a request was in flight, fall back to REST immediately
+        if (currentMsgRef.current.index !== null) {
+          finalizeCurrent(true);
+        }
+      }
+    };
+    socket.onerror = (e) => console.error("WS error:", e);
+    socket.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      handleRealtimeEvent(msg);
+    };
+  };
+
+  const closeRealtimeWS = () => {
+    if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
+    wsRef.current?.close();
+    wsRef.current = null;
+    wsReadyRef.current = false;
+    pendingQuestionRef.current = null;
+    if (responseTimerRef.current) { clearTimeout(responseTimerRef.current); responseTimerRef.current = null; }
   };
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
@@ -234,6 +408,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
       recognitionRef.current?.abort?.();
       window.speechSynthesis?.cancel();
       audioRef.current?.pause?.();
+      closeRealtimeWS();
+      stopStreamingAudio();
     };
   }, []);
 
@@ -313,66 +489,40 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     if (targetBeat) playNarratorAudio(targetBeat.content, index);
   };
 
-  const sendQA = async (questionOverride, speakResponse = false) => {
+  const sendQA = (questionOverride) => {
     const question = (questionOverride ?? input).trim();
     if (!question || loading) return;
 
     setMessages(p => [...p, { role: "user", content: question }]);
     setInput("");
     setLoading(true);
+    stopStreamingAudio();
 
     const assistantIndex = messages.length + 1;
+    currentMsgRef.current = { index: assistantIndex, buffer: "", audioStarted: false, question };
     setMessages(p => [...p, { role: "assistant", content: "", streaming: true }]);
 
-    try {
-      // Wait for text + audio together, then show both simultaneously
-      const res = await fetch(`${API_BASE}/twin/ask`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, athlete_id: athlete.id }),
-      });
-      if (!res.ok) throw new Error("API error");
-      const { text, audio_base64 } = await res.json();
+    // Ensure WS open
+    if (!wsRef.current ||
+        wsRef.current.readyState === WebSocket.CLOSED ||
+        wsRef.current.readyState === WebSocket.CLOSING) {
+      openRealtimeWS();
+    }
 
-      // Prepare audio before starting typewriter
-      let audio = null;
-      if (audio_base64) {
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
+    const socket = wsRef.current;
+    if (!socket) { finalizeCurrent(true); return; }
+
+    if (wsReadyRef.current && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "question", text: question }));
+      startResponseTimer();
+    } else {
+      pendingQuestionRef.current = question;
+      setTimeout(() => {
+        if (pendingQuestionRef.current === question) {
+          pendingQuestionRef.current = null;
+          finalizeCurrent(true); // WS never became ready — fall back to REST
         }
-        const bytes = Uint8Array.from(atob(audio_base64), c => c.charCodeAt(0));
-        const blob = new Blob([bytes], { type: "audio/mp3" });
-        audio = new Audio(URL.createObjectURL(blob));
-        audioRef.current = audio;
-      }
-
-      // Start typewriter + audio simultaneously
-      audio?.play();
-      let streamedReply = "";
-      await streamText(text, (token) => {
-        streamedReply += token;
-        setMessages(p => p.map((msg, i) =>
-          i === assistantIndex ? { ...msg, content: streamedReply } : msg
-        ));
-      });
-      setMessages(p => p.map((msg, i) =>
-        i === assistantIndex ? { ...msg, content: streamedReply, streaming: false } : msg
-      ));
-
-      setLoading(false);
-      setVoiceState("idle");
-      setVoiceSessionActive(false);
-
-    } catch {
-      setMessages(p => p.map((msg, i) =>
-        i === assistantIndex
-          ? { role: "assistant", content: STREAM_ERROR_MESSAGE, streaming: false, error: true }
-          : msg
-      ));
-      setLoading(false);
-      setVoiceState("idle");
-      setVoiceSessionActive(false);
+      }, 20000);
     }
   };
 
@@ -468,6 +618,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     audioRef.current?.pause?.();
     onSwitchMode(m);
     if (m === "narrator") setTimeout(triggerNarrator, 50);
+    if (m === "qa") setTimeout(openRealtimeWS, 50);
   };
 
   useEffect(() => {
@@ -483,6 +634,10 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
       return;
     }
     if (mode === "narrator") triggerNarrator();
+    if (mode === "qa") {
+      // Pre-warm: open WS so session is ready before user asks
+      openRealtimeWS();
+    }
   }, []);
 
   const voiceIsActive = voiceSessionActive || voiceState === "listening" || voiceState === "thinking" || voiceState === "speaking";
