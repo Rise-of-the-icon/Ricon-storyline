@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FEATURED_HERO, FEATURED_PICKS, FILTERS, LEGENDS } from "../data/athletes";
 import AthleteCard from "./AthleteCard";
+import { fetchRemoteLegends } from "../data/remoteTwins";
 
 function FeaturedStoryCard({ legend, delay, onClick }) {
   const label = legend.cat === "music" ? legend.genreLabel : legend.leagueLabel;
@@ -32,7 +33,9 @@ export default function HomeScreen({ onSelect }) {
   const [heroIndex, setHeroIndex] = useState(0);
   const [heroVisible, setHeroVisible] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [allLegends, setAllLegends] = useState(LEGENDS);
 
+  // Hero rotation
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
 
@@ -47,9 +50,21 @@ export default function HomeScreen({ onSelect }) {
     return () => window.clearInterval(interval);
   }, []);
 
+  // Merge remote twins from MongoDB
+  useEffect(() => {
+    fetchRemoteLegends().then(remote => {
+      if (remote.length === 0) return;
+      const localNames = new Set(LEGENDS.map(l => l.name.toLowerCase()));
+      const newOnes = remote.filter(r => !localNames.has(r.name.toLowerCase()));
+      if (newOnes.length > 0) {
+        setAllLegends(prev => [...prev, ...newOnes]);
+      }
+    });
+  }, []);
+
   const activeFilter = FILTERS.find((item) => item.id === filter) || FILTERS[0];
   const hero = FEATURED_HERO[heroIndex];
-  const filteredLegends = useMemo(() => LEGENDS.filter(activeFilter.match), [activeFilter]);
+  const filteredLegends = useMemo(() => allLegends.filter(activeFilter.match), [activeFilter, allLegends]);
   const sportsFilters = FILTERS.filter((item) => item.type === "sports");
   const musicFilters = FILTERS.filter((item) => item.type === "music");
 
