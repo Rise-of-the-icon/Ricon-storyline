@@ -19,6 +19,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List
+from motor.motor_asyncio import AsyncIOMotorClient
+from fastapi import Request
 
 INWORLD_API_KEY = os.environ.get("INWORLD_API_KEY", "")
 OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "")
@@ -71,6 +73,8 @@ SESSION_CONFIG = {
 }
 
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
+# MongoDB
+_db = AsyncIOMotorClient(os.environ.get("MONGODB_URI"))[os.environ.get("MONGODB_DB", "ricon")]
 
 # ── Non-streaming TTS (narrator beats) ─────────────────────────────────────
 def synthesize_audio(text: str, instruct: str = "") -> bytes:
@@ -294,6 +298,33 @@ async def clear_cache():
         f.unlink()
         cleared.append(f.name)
     return {"cleared": cleared}
+
+# ── Twin CRUD (Storyline-Studio remote storage) ──────────────────────────────
+
+@app.get("/api/twins")
+async def list_twins():
+    return [twin async for twin in _db.twins.find({}, {"_id": 0})]
+
+@app.get("/api/twins/{twin_id}")
+async def get_twin(twin_id: str):
+    twin = await _db.twins.find_one({"twinId": twin_id}, {"_id": 0})
+    if not twin:
+        raise HTTPException(status_code=404, detail="Twin not found")
+    return twin
+
+@app.put("/api/twins/{twin_id}")
+async def upsert_twin(twin_id: str, request: Request):
+    twin = await request.json()
+    twin["twinId"] = twin_id
+    await _db.twins.replace_one({"twinId": twin_id}, twin, upsert=True)
+    return {"ok": True}
+
+@app.delete("/api/twins/{twin_id}")
+async def delete_twin(twin_id: str):
+    result = await _db.twins.delete_one({"twinId": twin_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Twin not found")
+    return {"ok": True}
 
 if __name__ == "__main__":
     import uvicorn
