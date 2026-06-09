@@ -76,6 +76,9 @@ export function transformTwinToLegend(twin, options = {}) {
     league,
     leagueLabel,
     _remote:    true,
+    // Preserve raw API data for use in HomeScreen merge logic
+    _bdl:       twin.bdl_verified_stats  || null,
+    _wiki:      twin.wiki_verified_stats || null,
   };
 }
 

@@ -169,37 +169,30 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   const descriptionId = useId();
   const figmaTwinMode = new URLSearchParams(window.location.search).get("figmaTwin");
 
-  const playNarratorAudio = async (text, beatIndex = null) => {
+  const playNarratorAudio = (beatIndex) => {
     try {
-      setVoiceState("loading");
       if (audioRef.current) {
         audioRef.current.pause();
-        audioRef.current.currentTime = 0;
+        audioRef.current = null;
       }
-
-      // POC: serve from public/ folder (production: swap to CDN URL)
-      const audioSrc = beatIndex !== null
-        ? `/beat_${beatIndex}.mp3`
-        : `${API_BASE}/twin/speak`;
-
-      const audio = new Audio(audioSrc);
-      audioRef.current = audio;
-      audio.onplay = () => setVoiceState("speaking");
-      audio.onended = () => setVoiceState("idle");
-      audio.onerror = () => setVoiceState("idle");
-      await audio.play();
-    } catch (e) {
-      console.error("Narrator audio failed:", e);
-      setVoiceState("idle");
-    }
+      // Small delay to let pause settle
+      setTimeout(() => {
+        const audio = new Audio(`/beat_${beatIndex}.mp3`);
+        audioRef.current = audio;
+        audio.onplay  = () => setVoiceState("speaking");
+        audio.onended = () => setVoiceState("idle");
+        audio.onerror = () => setVoiceState("idle");
+        audio.play().catch(() => setVoiceState("idle"));
+      }, 50);
+    } catch { setVoiceState("idle"); }
   };
 
-  // ── Web Audio API for streaming PCM16 chunks ─────────────────────
-  const initAudioCtx = () => {
-    if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
-      audioCtxRef.current = new AudioContext({ sampleRate: 24000 });
-      nextPlayRef.current = 0;
-    }
+    // ── Web Audio API for streaming PCM16 chunks ─────────────────────
+    const initAudioCtx = () => {
+      if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+        audioCtxRef.current = new AudioContext({ sampleRate: 24000 });
+        nextPlayRef.current = 0;
+      }
   };
 
   const playPCM16Chunk = (base64Audio) => {

@@ -6,7 +6,9 @@ One Inworld session per browser WS. Reconnects transparently between questions.
 """
 
 import os
+import re
 import json
+import time
 import base64
 import asyncio
 import pathlib
@@ -21,11 +23,24 @@ from pydantic import BaseModel
 from typing import List
 from motor.motor_asyncio import AsyncIOMotorClient
 from fastapi import Request
+from datetime import datetime
 
+# ── Config ───────────────────────────────────────────────────────────────────
 INWORLD_API_KEY = os.environ.get("INWORLD_API_KEY", "")
 OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "")
 print(f"INWORLD key loaded: {bool(INWORLD_API_KEY)}")
 print(f"OPENAI key loaded: {bool(OPENAI_API_KEY)}")
+
+# Ball Don't Lie
+BDL_API_KEY  = os.environ.get("BDL_API_KEY", "")
+BDL_BASE_URL = "https://api.balldontlie.io/v1"
+BDL_HEADERS  = {"Authorization": BDL_API_KEY}
+print(f"BDL key loaded: {bool(BDL_API_KEY)}")
+
+# Wikipedia — must send User-Agent or requests are blocked from cloud IPs
+WIKI_HEADERS = {
+    "User-Agent": "RICON-Storyline/1.0 (digital-twin-platform; ricon-api) python-requests/2.x"
+}
 
 INWORLD_TTS_URL = "https://api.inworld.ai/tts/v1/voice"
 INWORLD_HEADERS = {
@@ -73,18 +88,220 @@ SESSION_CONFIG = {
 }
 
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
+
 # MongoDB
 _db = AsyncIOMotorClient(os.environ.get("MONGODB_URI"))[os.environ.get("MONGODB_DB", "ricon")]
 
-# ── Non-streaming TTS (narrator beats) ─────────────────────────────────────
+# ── Resilient HTTP helper ──────────────────────────────────────────────────────
+# Both Wikipedia and Ball Don't Lie occasionally answer cloud IPs with a 429 or
+# an empty / non-JSON body. A single attempt therefore loses enrichment data at
+# random. This helper retries with backoff and only ever returns parsed JSON or
+# None — callers never see a raw decode error.
+
+def _get_json(url, *, headers=None, params=None, timeout=10,
+              retries=3, backoff=2.0, label="HTTP") -> dict | None:
+    delay = 1.0
+    for attempt in range(1, retries + 1):
+        try:
+            resp = requests.get(url, headers=headers, params=params, timeout=timeout)
+            if resp.status_code == 429:
+                print(f"[{label}] 429 rate-limited (attempt {attempt}/{retries})")
+                time.sleep(delay); delay *= backoff
+                continue
+            if resp.status_code != 200:
+                print(f"[{label}] HTTP {resp.status_code}: {resp.text[:200]}")
+                return None
+            if not resp.text.strip():
+                print(f"[{label}] empty body (attempt {attempt}/{retries})")
+                time.sleep(delay); delay *= backoff
+                continue
+            try:
+                return resp.json()
+            except ValueError:
+                print(f"[{label}] non-JSON body (attempt {attempt}/{retries}): {resp.text[:120]}")
+                time.sleep(delay); delay *= backoff
+                continue
+        except Exception as e:
+            print(f"[{label}] request error (attempt {attempt}/{retries}): {e}")
+            time.sleep(delay); delay *= backoff
+    return None
+
+# ── Ball Don't Lie enrichment ─────────────────────────────────────────────────
+
+def bdl_search_player(name: str) -> dict | None:
+    parts = name.strip().split()
+    if not parts:
+        return None
+    last_name  = parts[-1] if len(parts) > 1 else parts[0]
+    first_name = parts[0]  if len(parts) > 1 else None
+    data = _get_json(
+        f"{BDL_BASE_URL}/players",
+        headers=BDL_HEADERS,
+        params={"search": last_name, "per_page": 25},
+        label="BDL",
+    )
+    if not data:
+        return None
+    players = data.get("data", [])
+    if not players:
+        return None
+    if first_name:
+        for player in players:
+            if player.get("first_name", "").lower() == first_name.lower():
+                return player
+    return players[0]
+
+def bdl_get_season_stats(player_id: int) -> dict | None:
+    for season in [2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016]:
+        data = _get_json(
+            f"{BDL_BASE_URL}/season_averages",
+            headers=BDL_HEADERS,
+            params={"season": season, "player_ids[]": player_id},
+            label="BDL",
+        )
+        if data:
+            rows = data.get("data", [])
+            if rows:
+                return {"season": season, "averages": rows[0]}
+    return None
+
+def bdl_enrich(player_name: str) -> dict | None:
+    if not BDL_API_KEY:
+        return None
+    player = bdl_search_player(player_name)
+    if not player:
+        print(f"[BDL] Player not found: {player_name}")
+        return None
+    season_stats = bdl_get_season_stats(player["id"])
+    result = {
+        "source":        "balldontlie",
+        "verified":      True,
+        "player_id":     player["id"],
+        "full_name":     f"{player['first_name']} {player['last_name']}",
+        "position":      player.get("position", ""),
+        "height":        player.get("height", ""),
+        "weight_pounds": player.get("weight_pounds", ""),
+        "fetched_at":    datetime.utcnow().isoformat(),
+    }
+    if season_stats:
+        avg = season_stats["averages"]
+        result["recent_season"] = {
+            "season": season_stats["season"],
+            "ppg":    avg.get("pts", 0),
+            "rpg":    avg.get("reb", 0),
+            "apg":    avg.get("ast", 0),
+            "gp":     avg.get("games_played", 0),
+        }
+    print(f"[BDL] ✓ Enriched: {result['full_name']}")
+    return result
+
+# ── Wikipedia stat extractor ──────────────────────────────────────────────────
+
+def _extract_num(text: str, patterns: list) -> str | None:
+    word_map = {"one": "1", "two": "2", "three": "3", "four": "4",
+                "five": "5", "six": "6", "seven": "7", "eight": "8"}
+    for pattern in patterns:
+        m = re.search(pattern, text, re.IGNORECASE)
+        if m:
+            val = m.group(1)
+            return word_map.get(val.lower(), val)
+    return None
+
+def wiki_extract_stats(text: str) -> dict:
+    if not text:
+        return {}
+    stats = {}
+
+    ppg = _extract_num(text, [
+        r'averaged?\s+(\d+\.?\d*)\s+points?',
+        r'(\d+\.?\d*)\s+points?\s+per\s+game',
+        r'(\d+\.?\d*)\s+ppg',
+    ])
+    if ppg: stats["PPG"] = ppg
+
+    rpg = _extract_num(text, [
+        r'(\d+\.?\d*)\s+rebounds?\s+per\s+game',
+        r'averaged?\s+\d+\.?\d*\s+points?\s+and\s+(\d+\.?\d*)\s+rebounds?',
+    ])
+    if rpg: stats["RPG"] = rpg
+
+    champ = _extract_num(text, [
+        r'(one|two|three|four|five|1|2|3|4|5)(?:-time)?\s+NBA\s+champion',
+        r'won\s+(one|two|three|1|2|3)\s+(?:NBA\s+)?championship',
+        r'(one|two|three|1|2|3)\s+championship\s+rings?',
+        r'(one|two|three|1|2|3)\s+NBA\s+titles?',
+        r'member of\s+(one|two|three|1|2|3)\s+(?:NBA\s+)?championship\s+teams?',
+        r'(one|two|three|1|2|3)\s+NBA\s+champion(?:ship)?\s+teams?',
+    ])
+    if champ: stats["Championships"] = champ
+
+    allstar = _extract_num(text, [
+        r'(one|two|three|four|five|six|seven|eight|nine|ten|\d+)(?:-time)?\s+(?:NBA\s+)?All[-\s]?Star',
+    ])
+    if allstar: stats["All-Stars"] = allstar
+
+    return stats
+
+def wiki_fetch_and_extract(player_name: str) -> dict:
+    """Search Wikipedia for the player, then extract career stats."""
+    # Step 1: Search with NBA context to find the right article
+    search = _get_json(
+        "https://en.wikipedia.org/w/api.php",
+        headers=WIKI_HEADERS,
+        params={
+            "action":   "query",
+            "list":     "search",
+            "srsearch": f"{player_name} NBA basketball player",
+            "srlimit":  3,
+            "format":   "json",
+        },
+        label="Wiki",
+    )
+    if not search:
+        print(f"[Wiki] Search failed for '{player_name}'")
+        return {}
+
+    results = search.get("query", {}).get("search", [])
+    title = results[0]["title"] if results else player_name
+    print(f"[Wiki] Found article: '{title}'")
+
+    # Step 2: Fetch intro text from the identified article
+    extract = _get_json(
+        "https://en.wikipedia.org/w/api.php",
+        headers=WIKI_HEADERS,
+        params={
+            "action":      "query",
+            "titles":      title,
+            "prop":        "extracts",
+            "exintro":     True,
+            "explaintext": True,
+            "format":      "json",
+        },
+        label="Wiki",
+    )
+    if not extract:
+        print(f"[Wiki] Extract failed for '{title}'")
+        return {}
+
+    pages = extract.get("query", {}).get("pages", {})
+    page  = next(iter(pages.values()), {})
+    text  = page.get("extract", "")
+    stats = wiki_extract_stats(text)
+    if stats:
+        stats["source"]     = "wikipedia"
+        stats["page_title"] = title
+        stats["fetched_at"] = datetime.utcnow().isoformat()
+    return stats
+
+# ── Non-streaming TTS (narrator beats) ───────────────────────────────────────
 def synthesize_audio(text: str, instruct: str = "") -> bytes:
     resp = requests.post(
         INWORLD_TTS_URL,
         headers=INWORLD_HEADERS,
         json={
-            "voiceId": VOICE_ID,
-            "modelId": TTS_MODEL,
-            "text": text,
+            "voiceId":     VOICE_ID,
+            "modelId":     TTS_MODEL,
+            "text":        text,
             "audioConfig": {"audioEncoding": "MP3", "sampleRateHertz": 24000},
         },
     )
@@ -92,7 +309,7 @@ def synthesize_audio(text: str, instruct: str = "") -> bytes:
         raise HTTPException(500, f"TTS failed: {resp.status_code} {resp.text}")
     return base64.b64decode(resp.json()["audioContent"])
 
-# ── Inworld session helper ───────────────────────────────────────────────────
+# ── Inworld session helper ────────────────────────────────────────────────────
 def is_open(conn) -> bool:
     try:
         return conn is not None and conn.state == State.OPEN
@@ -100,7 +317,6 @@ def is_open(conn) -> bool:
         return False
 
 async def open_inworld_session():
-    """Open + configure one Inworld Realtime session. Returns connection or raises."""
     inworld = await ws_lib.connect(
         INWORLD_REALTIME_URL,
         additional_headers=INWORLD_WS_HEADERS,
@@ -126,7 +342,7 @@ async def open_inworld_session():
     await inworld.close()
     raise RuntimeError("Session setup incomplete")
 
-# ── App ─────────────────────────────────────────────────────────────────────
+# ── App ──────────────────────────────────────────────────────────────────────
 app = FastAPI(title="RICON Digital Twin")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.add_middleware(
@@ -141,18 +357,34 @@ app.add_middleware(
 async def startup():
     print(f"✓ Voice: {VOICE_ID}")
     print("✓ Realtime API ready")
+    # Single deduplication key: coreIdentity.name (player name), which is exactly
+    # how the fan app merges twins. We previously also kept a unique _wiki_id index;
+    # combining two unique indexes meant an upsert filtered on one key could collide
+    # with another document's key on the other index, raising E11000 and dropping
+    # the (already enriched) save. Drop the legacy index so that can't recur.
+    try:
+        await _db.twins.drop_index("_wiki_id_1")
+        print("✓ Dropped legacy _wiki_id unique index")
+    except Exception as e:
+        print(f"  (no legacy _wiki_id index to drop: {e})")
+    # sparse=True so documents without a name don't violate the constraint.
+    try:
+        await _db.twins.create_index("coreIdentity.name", unique=True, sparse=True)
+        print("✓ MongoDB deduplication index ready (coreIdentity.name)")
+    except Exception as e:
+        print(f"⚠ MongoDB index creation skipped (may already exist or duplicates present): {e}")
 
 @app.get("/health")
 async def health():
     return {"status": "ok", "voice": VOICE_ID, "mode": "realtime"}
 
-# ── REST fallback: reliable non-streaming Q&A ───────────────────────────────
+# ── REST fallback: reliable non-streaming Q&A ─────────────────────────────────
 class AskRequest(BaseModel):
-    question: str
+    question:   str
     athlete_id: str = "west_d"
 
 class AskResponse(BaseModel):
-    text: str
+    text:         str
     audio_base64: str
 
 @app.post("/twin/ask", response_model=AskResponse)
@@ -169,18 +401,15 @@ async def ask(req: AskRequest):
     audio = synthesize_audio(text)
     return AskResponse(text=text, audio_base64=base64.b64encode(audio).decode("utf-8"))
 
-# ── WebSocket Q&A ────────────────────────────────────────────────────────────
+# ── WebSocket Q&A ─────────────────────────────────────────────────────────────
 @app.websocket("/twin/ws")
 async def twin_ws(browser: WebSocket):
     await browser.accept()
     print("Browser connected")
-
     inworld = None
     try:
-        # Connect to Inworld and signal ready
         inworld = await open_inworld_session()
         await browser.send_json({"type": "ready"})
-
         while True:
             msg = await browser.receive_json()
             if msg.get("type") == "ping":
@@ -190,8 +419,6 @@ async def twin_ws(browser: WebSocket):
             text = msg.get("text", "").strip()
             if not text:
                 continue
-
-            # Reconnect if Inworld closed after previous response.done
             if not is_open(inworld):
                 print("Reconnecting to Inworld...")
                 try:
@@ -200,14 +427,11 @@ async def twin_ws(browser: WebSocket):
                     print(f"Reconnect failed: {e}")
                     await browser.send_json({"type": "error", "message": "reconnect_failed"})
                     continue
-
-            # Send question
             try:
                 await inworld.send(json.dumps({
                     "type": "conversation.item.create",
                     "item": {
-                        "type": "message",
-                        "role": "user",
+                        "type": "message", "role": "user",
                         "content": [{"type": "input_text", "text": text}],
                     },
                 }))
@@ -217,19 +441,14 @@ async def twin_ws(browser: WebSocket):
                 inworld = None
                 await browser.send_json({"type": "error", "message": "send_failed"})
                 continue
-
-            # Stream response to browser
             try:
                 async with asyncio.timeout(30):
                     async for raw in inworld:
                         event = json.loads(raw)
                         t = event.get("type", "")
                         if t in (
-                            "response.text.delta",
-                            "response.output_audio.delta",
-                            "response.output_item.done",
-                            "response.done",
-                            "error",
+                            "response.text.delta", "response.output_audio.delta",
+                            "response.output_item.done", "response.done", "error",
                         ):
                             await browser.send_json(event)
                         if t == "response.done":
@@ -245,7 +464,6 @@ async def twin_ws(browser: WebSocket):
                 print(f"Stream error: {e}")
                 inworld = None
                 await browser.send_json({"type": "error", "message": "stream_error"})
-
     except WebSocketDisconnect:
         print("Browser disconnected")
     except Exception as e:
@@ -256,9 +474,9 @@ async def twin_ws(browser: WebSocket):
             except: pass
         print("Cleanup complete")
 
-# ── Narrator endpoints ───────────────────────────────────────────────────────
+# ── Narrator endpoints ────────────────────────────────────────────────────────
 class SpeakRequest(BaseModel):
-    text: str
+    text:     str
     instruct: str = NARRATOR_INSTRUCT
 
 class SpeakResponse(BaseModel):
@@ -266,7 +484,7 @@ class SpeakResponse(BaseModel):
 
 class BeatItem(BaseModel):
     index: int
-    text: str
+    text:  str
 
 class PregenerateRequest(BaseModel):
     beats: List[BeatItem]
@@ -299,7 +517,7 @@ async def clear_cache():
         cleared.append(f.name)
     return {"cleared": cleared}
 
-# ── Twin CRUD (Storyline-Studio remote storage) ──────────────────────────────
+# ── Twin CRUD (Storyline-Studio remote storage) ───────────────────────────────
 
 @app.get("/api/twins")
 async def list_twins():
@@ -316,7 +534,46 @@ async def get_twin(twin_id: str):
 async def upsert_twin(twin_id: str, request: Request):
     twin = await request.json()
     twin["twinId"] = twin_id
-    await _db.twins.replace_one({"twinId": twin_id}, twin, upsert=True)
+    twin.pop("_wiki_id", None)  # legacy field — no longer a dedup key
+
+    player_name = (twin.get("coreIdentity") or {}).get("name", "").strip()
+
+    # Enrichment is best-effort: a failure here must never block the save.
+    # The blocking `requests` calls (with retries) run in a worker thread so
+    # they don't stall the event loop.
+    if player_name:
+        # 1. Ball Don't Lie
+        if BDL_API_KEY:
+            try:
+                bdl = await asyncio.to_thread(bdl_enrich, player_name)
+                if bdl:
+                    twin["bdl_verified_stats"] = bdl
+            except Exception as e:
+                print(f"[BDL] enrichment skipped: {e}")
+
+        # 2. Wikipedia — prefer stats already in the imported summary, else fetch live
+        try:
+            wiki_stats = wiki_extract_stats((twin.get("wikipedia") or {}).get("summary", ""))
+            if not wiki_stats:
+                wiki_stats = await asyncio.to_thread(wiki_fetch_and_extract, player_name)
+            if wiki_stats:
+                twin["wiki_verified_stats"] = wiki_stats
+                print(f"[Wiki] ✓ {player_name}: {wiki_stats}")
+        except Exception as e:
+            print(f"[Wiki] enrichment skipped: {e}")
+
+    # Deduplicate on coreIdentity.name — the same key the fan app merges on, and
+    # the same field the unique index covers. Because the upsert filter targets
+    # that field, an inserted document can never collide with another's key.
+    try:
+        if player_name:
+            await _db.twins.replace_one({"coreIdentity.name": player_name}, twin, upsert=True)
+        else:
+            await _db.twins.replace_one({"twinId": twin_id}, twin, upsert=True)
+    except Exception as e:
+        print(f"[Mongo] upsert failed for '{player_name or twin_id}': {e}")
+        raise HTTPException(status_code=500, detail="Failed to save twin")
+
     return {"ok": True}
 
 @app.delete("/api/twins/{twin_id}")
@@ -325,6 +582,62 @@ async def delete_twin(twin_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Twin not found")
     return {"ok": True}
+
+# ── Enrichment test endpoints ─────────────────────────────────────────────────
+
+@app.get("/api/enrich/nba/{player_name}")
+async def enrich_nba(player_name: str):
+    data = bdl_enrich(player_name)
+    if not data:
+        raise HTTPException(status_code=404, detail=f"'{player_name}' not found on Ball Don't Lie")
+    return data
+
+@app.get("/api/enrich/wiki/{player_name}")
+async def enrich_wiki(player_name: str):
+    stats = wiki_fetch_and_extract(player_name)
+    if not stats:
+        raise HTTPException(status_code=404, detail=f"No stats found for '{player_name}'")
+    return stats
+
+@app.get("/api/debug/wiki/{player_name}")
+async def debug_wiki(player_name: str):
+    try:
+        search_resp = requests.get(
+            "https://en.wikipedia.org/w/api.php",
+            headers=WIKI_HEADERS,
+            params={
+                "action": "query", "list": "search",
+                "srsearch": f"{player_name} NBA basketball player",
+                "srlimit": 3, "format": "json",
+            }, timeout=10,
+        )
+        if not search_resp.text.strip():
+            return {"error": "Empty search response"}
+        results = search_resp.json().get("query", {}).get("search", [])
+        title = results[0]["title"] if results else player_name
+        extract_resp = requests.get(
+            "https://en.wikipedia.org/w/api.php",
+            headers=WIKI_HEADERS,
+            params={
+                "action": "query", "titles": title,
+                "prop": "extracts", "exintro": True,
+                "explaintext": True, "format": "json",
+            }, timeout=10,
+        )
+        if not extract_resp.text.strip():
+            return {"error": "Empty extract response", "selected_title": title}
+        pages = extract_resp.json().get("query", {}).get("pages", {})
+        page  = next(iter(pages.values()), {})
+        text  = page.get("extract", "")
+        return {
+            "search_results":  [r["title"] for r in results],
+            "selected_title":  title,
+            "extract_length":  len(text),
+            "extract_preview": text[:800],
+            "parsed_stats":    wiki_extract_stats(text),
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
