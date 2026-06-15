@@ -1,124 +1,177 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import CSS from "./src/styles";
 import HomeScreen from "./src/components/HomeScreen";
 import AthleteScreen from "./src/components/AthleteScreen";
-import TwinModal, { prewarmOpeningNarrative } from "./src/components/TwinModal";
-import { LEGENDS } from "./src/data/athletes";
+import TwinModal from "./src/components/TwinModal";
+import TwinAccessGateModal from "./src/components/TwinAccessGateModal";
+import SignUpScreen from "./src/components/auth/SignUpScreen";
+import SignInScreen from "./src/components/auth/SignInScreen";
+import SelectTwinScreen from "./src/components/auth/SelectTwinScreen";
+import SubscribeScreen from "./src/components/auth/SubscribeScreen";
+import SubscriptionSuccessScreen from "./src/components/auth/SubscriptionSuccessScreen";
+import FeedScreen from "./src/components/feed/FeedScreen";
+import FanHomeScreen from "./src/components/fan/FanHomeScreen";
+import NewContentDropScreen from "./src/components/talent/NewContentDropScreen";
+import { getLegacyLegendById } from "./src/data/twins";
+import { canAccessTwinChat, getTwinAccessState } from "./src/lib/twinAccess";
+import { buildDropChatPrompt, getContentDropById } from "./src/lib/contentDropFeed";
+import { repairFanExperienceState } from "./src/lib/fanExperience";
 
-export default function RICONStoryline() {
-  const figmaTwinMode = new URLSearchParams(window.location.search).get("figmaTwin");
-  const figmaAthlete = figmaTwinMode ? LEGENDS.find(a => a.id === "jordan") : null;
-  const [screen, setScreen] = useState(figmaAthlete ? "athlete" : "home");
-  const [athlete, setAthlete] = useState(figmaAthlete);
-  const [twinOpen, setTwinOpen] = useState(Boolean(figmaTwinMode));
-  const [twinMode, setTwinMode] = useState(figmaTwinMode || "narrator");
-  const [prewarmedNarrative, setPrewarmedNarrative] = useState(null);
-  const [transitionPhase, setTransitionPhase] = useState("entered");
-  const [leavingPage, setLeavingPage] = useState(null);
-  const [leavingActive, setLeavingActive] = useState(false);
-  const prewarmCache = useRef(new Map());
-  const transitionFrame = useRef(null);
-
-  const resetScroll = () => window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0 }));
-  const startScreenTransition = (nextScreen, nextAthlete = null) => {
-    if (transitionFrame.current) window.cancelAnimationFrame(transitionFrame.current);
-    setLeavingPage({ screen, athlete });
-    setLeavingActive(false);
-    setTransitionPhase("entering");
-    setScreen(nextScreen);
-    setAthlete(nextAthlete);
-    resetScroll();
-    transitionFrame.current = window.requestAnimationFrame(() => {
-      setLeavingActive(true);
-      setTransitionPhase("entered");
-      transitionFrame.current = null;
-    });
-  };
-  const openAthlete = (a) => {
-    setPrewarmedNarrative(prewarmCache.current.get(a.id) || null);
-    startScreenTransition("athlete", a);
-  };
-  const goHome = () => {
-    setPrewarmedNarrative(null);
-    setTwinOpen(false);
-    startScreenTransition("home");
-  };
-  const openTwin = (mode) => { setTwinMode(mode); setTwinOpen(true); };
-
+function FanExperienceBootstrap({ children }) {
   useEffect(() => {
-    if (screen !== "athlete" || !athlete) return undefined;
-
-    if (prewarmCache.current.has(athlete.id)) {
-      setPrewarmedNarrative(prewarmCache.current.get(athlete.id));
-      return undefined;
-    }
-
-    let cancelled = false;
-    prewarmOpeningNarrative(athlete)
-      .then((response) => {
-        prewarmCache.current.set(athlete.id, response);
-        if (!cancelled) setPrewarmedNarrative(response);
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, [screen, athlete]);
-
-  useEffect(() => () => {
-    if (transitionFrame.current) window.cancelAnimationFrame(transitionFrame.current);
+    repairFanExperienceState();
   }, []);
 
-  const renderPage = (pageScreen, pageAthlete, isLeaving = false) => {
-    if (pageScreen === "home") {
-      return <HomeScreen onSelect={isLeaving ? () => {} : openAthlete} />;
-    }
+  return children;
+}
 
-    if (pageScreen === "athlete" && pageAthlete) {
-      return (
-        <AthleteScreen
-          athlete={pageAthlete}
-          onBack={isLeaving ? () => {} : goHome}
-          onTwin={isLeaving ? () => {} : openTwin}
-        />
-      );
-    }
+function LegendRoute() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const figmaTwinMode = searchParams.get("figmaTwin");
+  const openTwinParam = searchParams.get("openTwin");
+  const dropId = searchParams.get("dropId");
+  const bypassGate = Boolean(figmaTwinMode);
+  const athlete = id ? getLegacyLegendById(id) : undefined;
+  const dropContext = dropId ? getContentDropById(dropId) : undefined;
+  const initialChatPrompt =
+    dropContext && dropContext.twinId === athlete?.id
+      ? buildDropChatPrompt(dropContext)
+      : undefined;
+  const twinAccess = useMemo(
+    () => (athlete ? getTwinAccessState(athlete.id) : null),
+    [athlete?.id]
+  );
+  const initialTwinMode = figmaTwinMode === "qaThread" || openTwinParam === "qa" ? "qa" : "narrator";
+  const shouldOpenInitially =
+    Boolean(figmaTwinMode && bypassGate) ||
+    Boolean(openTwinParam && athlete && canAccessTwinChat(athlete.id, bypassGate));
+  const [twinOpen, setTwinOpen] = useState(shouldOpenInitially);
+  const [gateOpen, setGateOpen] = useState(false);
+  const [twinMode, setTwinMode] = useState(initialTwinMode);
 
-    return null;
+  useEffect(() => {
+    if (!athlete || !openTwinParam) return;
+    const mode = openTwinParam === "narrator" ? "narrator" : "qa";
+    setTwinMode(mode);
+    if (canAccessTwinChat(athlete.id, bypassGate)) {
+      setTwinOpen(true);
+      setGateOpen(false);
+    } else {
+      setTwinOpen(false);
+      setGateOpen(true);
+    }
+  }, [athlete?.id, openTwinParam, bypassGate]);
+
+  useEffect(() => {
+    if (!dropId || dropContext) return;
+    const params = new URLSearchParams(searchParams);
+    params.delete("dropId");
+    const nextSearch = params.toString();
+    navigate(
+      { pathname: `/legend/${id}`, search: nextSearch ? `?${nextSearch}` : "" },
+      { replace: true }
+    );
+  }, [dropId, dropContext, id, navigate, searchParams]);
+
+  if (!athlete) {
+    return <Navigate to="/" replace />;
+  }
+
+  const resetScroll = () => window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0 }));
+
+  const requestTwin = (mode) => {
+    setTwinMode(mode);
+    if (canAccessTwinChat(athlete.id, bypassGate)) {
+      setGateOpen(false);
+      setTwinOpen(true);
+      return;
+    }
+    setTwinOpen(false);
+    setGateOpen(true);
   };
 
   return (
     <>
+      <AthleteScreen
+        athlete={athlete}
+        twinAccess={twinAccess}
+        onBack={() => {
+          setTwinOpen(false);
+          setGateOpen(false);
+          resetScroll();
+          navigate("/");
+        }}
+        onTwin={requestTwin}
+      />
+      {twinOpen && (
+        <TwinModal
+          athlete={athlete}
+          mode={twinMode}
+          initialPrompt={initialChatPrompt}
+          onClose={() => setTwinOpen(false)}
+          onSwitchMode={(m) => setTwinMode(m)}
+        />
+      )}
+      {gateOpen && twinAccess && !twinAccess.canAccessChat && (
+        <TwinAccessGateModal
+          athlete={athlete}
+          access={twinAccess}
+          onClose={() => setGateOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function HomeRoute() {
+  const navigate = useNavigate();
+  const resetScroll = () => window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0 }));
+
+  return (
+    <HomeScreen
+      onSelect={(legend) => {
+        resetScroll();
+        navigate(`/legend/${legend.id}`);
+      }}
+    />
+  );
+}
+
+function FigmaTwinRedirect() {
+  const figmaTwinMode = new URLSearchParams(window.location.search).get("figmaTwin");
+  if (figmaTwinMode) {
+    const search = window.location.search;
+    return <Navigate to={`/legend/jordan${search}`} replace />;
+  }
+  return <HomeRoute />;
+}
+
+export default function RICONStoryline() {
+  return (
+    <>
       <style>{CSS}</style>
       <div className="ricon-root">
-        <div className="page-transition-stage">
-          {leavingPage && (
-            <div
-              className={`page-transition-layer page-transition-exit${leavingActive ? " is-leaving" : ""}`}
-              aria-hidden="true"
-              onTransitionEnd={(event) => {
-                if (event.target !== event.currentTarget) return;
-                setLeavingPage(null);
-                setLeavingActive(false);
-              }}
-            >
-              {renderPage(leavingPage.screen, leavingPage.athlete, true)}
-            </div>
-          )}
-          <div className={`page-transition-layer page-transition-${transitionPhase}`} key={`${screen}-${athlete?.id || "home"}`}>
-            {renderPage(screen, athlete)}
-          </div>
-        </div>
-        {twinOpen && athlete && (
-          <TwinModal
-            athlete={athlete}
-            mode={twinMode}
-            prewarmedNarrative={twinMode === "narrator" ? prewarmedNarrative : null}
-            onClose={() => setTwinOpen(false)}
-            onSwitchMode={(m) => setTwinMode(m)}
-          />
-        )}
+        <BrowserRouter>
+          <FanExperienceBootstrap>
+            <Routes>
+            <Route path="/" element={<FigmaTwinRedirect />} />
+            <Route path="/legend/:id" element={<LegendRoute />} />
+            <Route path="/signup" element={<SignUpScreen />} />
+            <Route path="/signin" element={<SignInScreen />} />
+            <Route path="/select-twin" element={<SelectTwinScreen />} />
+            <Route path="/subscribe" element={<SubscribeScreen />} />
+            <Route path="/subscription-success" element={<SubscriptionSuccessScreen />} />
+            <Route path="/fan/home" element={<FanHomeScreen />} />
+            <Route path="/home" element={<Navigate to="/fan/home" replace />} />
+            <Route path="/feed" element={<FeedScreen />} />
+            <Route path="/talent/drops/new" element={<NewContentDropScreen />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </FanExperienceBootstrap>
+        </BrowserRouter>
       </div>
     </>
   );
