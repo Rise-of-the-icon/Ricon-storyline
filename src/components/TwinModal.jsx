@@ -188,10 +188,32 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, initia
       recognitionRef.current?.abort?.();
       window.speechSynthesis?.cancel();
       audioRef.current?.pause?.();
-      closeRealtimeWS();
-      stopStreamingAudio();
     };
   }, []);
+
+  const playNarratorAudio = (beatIndex) => {
+    try {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      setTimeout(() => {
+        const src = `/beat_${beatIndex}.mp3`;
+        const audio = new Audio(src);
+        audioRef.current = audio;
+        audio.onplay = () => setVoiceState("speaking");
+        audio.onended = () => setVoiceState("idle");
+        audio.onerror = () => {
+          console.warn(`Narrator audio failed to load: ${src}`);
+          setVoiceState("idle");
+        };
+        audio.currentTime = 0;
+        audio.play().catch(() => setVoiceState("idle"));
+      }, 50);
+    } catch {
+      setVoiceState("idle");
+    }
+  };
 
   const speakReply = (reply) => {
     if (!("speechSynthesis" in window)) {
@@ -218,7 +240,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, initia
     const firstBeat = buildNarratorMessage(athlete, 0);
     setMessages([firstBeat]);
     setLoading(false);
-    playNarratorAudio(firstBeat.content, 0);
+    playNarratorAudio(0);
   };
 
   const continueNarrator = async () => {
@@ -233,7 +255,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, initia
       return [...p, nextBeat];
     });
     setLoading(false);
-    playNarratorAudio(nextBeat.content, nextIndex);
+    playNarratorAudio(nextIndex);
   };
 
   const selectNarratorBeat = async (index) => {
@@ -241,7 +263,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, initia
     setActiveBeat(index);
     narratorIndex.current = index;
     if (messages[index]) {
-      playNarratorAudio(messages[index].content, index);
+      playNarratorAudio(index);
       return;
     }
     setLoading(true);
@@ -257,7 +279,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, initia
       return next;
     });
     setLoading(false);
-    if (targetBeat) playNarratorAudio(targetBeat.content, index);
+    if (targetBeat) playNarratorAudio(index);
   };
 
   const mapStoredToUi = useCallback((stored) => ({

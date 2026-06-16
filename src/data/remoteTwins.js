@@ -16,14 +16,31 @@ function extractYears(timeline) {
   return `${years[0]} – ${years[years.length - 1]}`;
 }
 
+function isPublicTimelineEvent(event) {
+  return event?.visibility === "Public" && event?.approvalStatus === "Reviewed";
+}
+
+function isPublicCustomMoment(moment) {
+  return moment?.visibility === "Public";
+}
+
+function isPublishableTwin(twin) {
+  if (twin?.draftStatus !== "saved") return false;
+  const publicTimeline = (twin.timeline || []).some(isPublicTimelineEvent);
+  const publicMoments = (twin.customMoments || []).some(isPublicCustomMoment);
+  return publicTimeline || publicMoments;
+}
+
 export function transformTwinToLegend(twin, options = {}) {
   const { cat = "sports", league = "nba", leagueLabel = "NBA" } = options;
 
   const name   = twin.coreIdentity?.name || "Unknown";
   const wiki   = twin.wikipedia || {};
   const bdl    = twin.bdl_verified_stats || {};
-  const timeline = (twin.timeline || []).sort((a, b) => (a.year || 0) - (b.year || 0));
-  const customMoments = twin.customMoments || [];
+  const timeline = (twin.timeline || [])
+    .filter(isPublicTimelineEvent)
+    .sort((a, b) => (a.year || 0) - (b.year || 0));
+  const customMoments = (twin.customMoments || []).filter(isPublicCustomMoment);
 
   const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2);
 
@@ -90,9 +107,11 @@ export async function fetchRemoteLegends() {
       return [];
     }
     const twins = await res.json();
-    return twins.map(t =>
-      transformTwinToLegend(t, { cat: "sports", league: "nba", leagueLabel: "NBA" })
-    );
+    return twins
+      .filter(isPublishableTwin)
+      .map(t =>
+        transformTwinToLegend(t, { cat: "sports", league: "nba", leagueLabel: "NBA" })
+      );
   } catch (err) {
     console.warn("[remoteTwins] Fetch failed, using local data only:", err);
     return [];

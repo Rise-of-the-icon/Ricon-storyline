@@ -198,6 +198,10 @@ export default function HomeScreen({ onSelect }) {
           <div className="browse-count">
             {filteredLegends.length} verified legacies
           </div>
+        </div>
+        <div className="athlete-grid">
+          {filteredLegends.map((a, i) => <AthleteCard key={a.id} athlete={a} delay={i * 50} onClick={() => onSelect(a)} />)}
+        </div>
         </section>
       </main>
 
