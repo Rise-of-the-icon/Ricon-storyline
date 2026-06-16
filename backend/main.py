@@ -10,6 +10,7 @@ import re
 import json
 import time
 import base64
+import hashlib
 import asyncio
 import pathlib
 import requests
@@ -43,16 +44,21 @@ WIKI_HEADERS = {
 }
 
 INWORLD_TTS_URL = "https://api.inworld.ai/tts/v1/voice"
+INWORLD_TTS_SYNTH_URL = "https://api.inworld.ai/v1/tts/synthesize"
 INWORLD_HEADERS = {
     "Authorization": f"Basic {INWORLD_API_KEY}",
     "Content-Type": "application/json",
 }
 VOICE_ID          = "default--z5zasdfwci5ofrt-gmsjw__test"
+WALT_VOICE_ID     = os.environ.get("WALT_VOICE_ID", "default--z5zasdfwci5ofrt-gmsjw__walt")
 TTS_MODEL         = "inworld-tts-1.5-mini"
+RESEARCH_TTS_MODEL = os.environ.get("RESEARCH_TTS_MODEL", "inworld-tts-2")
 STATIC_DIR        = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+RESEARCH_VOICE_CACHE_DIR = os.path.join(STATIC_DIR, "research_voice")
 NARRATOR_INSTRUCT = "Speak in a thoughtful, retrospective tone like a veteran reflecting on his career with quiet pride."
 
 os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(RESEARCH_VOICE_CACHE_DIR, exist_ok=True)
 
 SYSTEM_PROMPT = """
 You are David West — a retired NBA player with 15 seasons in the league.
@@ -73,6 +79,17 @@ Speak in first person. Keep responses warm, conversational, and concise (2-3 sen
 Do not make up facts beyond what you know.
 """.strip()
 
+DAVID_NONVERBAL_VOICE_PROMPT = """
+Voice delivery for David's cloned audio:
+- Use a non-verbal, reflective delivery pattern.
+- Begin most answers with a brief natural reaction, such as "Mm.", "Hmm.", or a soft exhale written as "Ah.".
+- After that reaction, pause briefly in the rhythm of the sentence before answering.
+- Keep the rest of the answer grounded, measured, and conversational.
+- Do not overdo the reaction; use one short non-verbal cue, then move into the answer.
+""".strip()
+
+DAVID_REALTIME_PROMPT = f"{SYSTEM_PROMPT}\n\n{DAVID_NONVERBAL_VOICE_PROMPT}"
+
 INWORLD_REALTIME_URL = "wss://api.inworld.ai/api/v1/realtime/session?key=ricon-twin&protocol=realtime"
 INWORLD_WS_HEADERS   = {"Authorization": f"Basic {INWORLD_API_KEY}"}
 
@@ -80,17 +97,18 @@ SESSION_CONFIG = {
     "type": "session.update",
     "session": {
         "model": "openai/gpt-4o-mini",
-        "instructions": SYSTEM_PROMPT,
+        "instructions": DAVID_REALTIME_PROMPT,
         "output_modalities": ["audio", "text"],
         "max_output_tokens": 100,
         "audio": {"output": {"voice": VOICE_ID, "model": TTS_MODEL}},
     },
 }
 
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
+openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # MongoDB
-_db = AsyncIOMotorClient(os.environ.get("MONGODB_URI"))[os.environ.get("MONGODB_DB", "ricon")]
+MONGODB_URI = os.environ.get("MONGODB_URI")
+_db = AsyncIOMotorClient(MONGODB_URI)[os.environ.get("MONGODB_DB", "ricon")] if MONGODB_URI else None
 
 # ── Resilient HTTP helper ──────────────────────────────────────────────────────
 # Both Wikipedia and Ball Don't Lie occasionally answer cloud IPs with a 429 or
@@ -309,6 +327,137 @@ def synthesize_audio(text: str, instruct: str = "") -> bytes:
         raise HTTPException(500, f"TTS failed: {resp.status_code} {resp.text}")
     return base64.b64decode(resp.json()["audioContent"])
 
+RESEARCH_EMOTION_STEERING = {
+    "Intensity": {
+        "instruction": "Speak with contained intensity: focused, forceful, and urgent without shouting.",
+        "speed": 1.0,
+        "delivery_mode": "performance",
+    },
+    "Depth": {
+        "instruction": "Speak with emotional depth: reflective, grounded, and weighted, with a slower breath.",
+        "speed": 0.8,
+        "delivery_mode": "performance",
+    },
+    "Energy": {
+        "instruction": "Speak with forward energy: alert, animated, and quick, with varied emphasis.",
+        "speed": 1.15,
+        "delivery_mode": "performance",
+    },
+    "Quiet": {
+        "instruction": "Speak quietly and intimately: soft, restrained, and close-mic, with longer pauses.",
+        "speed": 0.7,
+        "delivery_mode": "performance",
+    },
+    "Character": {
+        "instruction": "Speak in a centered character voice: natural, even, conversational, and steady.",
+        "speed": 1.0,
+        "delivery_mode": "performance",
+    },
+    "Non-Verbal": {
+        "instruction": "Give a brief non-verbal reaction first, then pause before the spoken line.",
+        "speed": 0.9,
+        "delivery_mode": "performance",
+    },
+}
+
+def _audio_from_inworld_response(resp: requests.Response) -> bytes | None:
+    content_type = resp.headers.get("content-type", "")
+    if content_type.startswith("audio/") or content_type == "application/octet-stream":
+        return resp.content
+    try:
+        payload = resp.json()
+    except ValueError:
+        return None
+    audio_content = (
+        payload.get("audioContent")
+        or payload.get("audio_content")
+        or (payload.get("audio") or {}).get("content")
+        or (payload.get("audio") or {}).get("data")
+    )
+    if isinstance(audio_content, str) and audio_content:
+        return base64.b64decode(audio_content)
+    return None
+
+def synthesize_research_audio(
+    text: str,
+    *,
+    voice_id: str,
+    emotion_family: str,
+    model_id: str = RESEARCH_TTS_MODEL,
+    sample_rate: int = 24000,
+) -> tuple[bytes, dict]:
+    steering = RESEARCH_EMOTION_STEERING.get(emotion_family)
+    if not steering:
+        raise HTTPException(400, f"Unsupported emotion family: {emotion_family}")
+
+    # TTS-2 steering is natural-language text inside brackets before the line.
+    # Keep the generated script intact after the steering prefix so testers can
+    # compare the same copy across emotion families.
+    steered_text = f"[{steering['instruction']}]\n{text.strip()}"
+    modern_payload = {
+        "text": steered_text,
+        "voice": voice_id,
+        "model": model_id,
+        "encoding": "MP3",
+        "sampleRate": sample_rate,
+        "delivery_mode": steering["delivery_mode"],
+        "speed": steering["speed"],
+    }
+    legacy_payload = {
+        "voiceId": voice_id,
+        "modelId": model_id,
+        "text": steered_text,
+        "audioConfig": {
+            "audioEncoding": "MP3",
+            "sampleRateHertz": sample_rate,
+        },
+    }
+
+    attempts = [
+        ("modern", INWORLD_TTS_SYNTH_URL, modern_payload),
+        ("legacy", INWORLD_TTS_URL, legacy_payload),
+    ]
+    last_error = ""
+    for mode, url, payload in attempts:
+        resp = requests.post(url, headers=INWORLD_HEADERS, json=payload, timeout=60)
+        if resp.status_code == 200:
+            audio = _audio_from_inworld_response(resp)
+            if audio:
+                return audio, {
+                    "mode": mode,
+                    "model": model_id,
+                    "emotion_family": emotion_family,
+                    "instruction": steering["instruction"],
+                    "speed": steering["speed"],
+                    "delivery_mode": steering["delivery_mode"],
+                }
+            last_error = f"{mode} response did not contain audio"
+            continue
+        last_error = f"{mode} failed: {resp.status_code} {resp.text[:300]}"
+        print(f"[Research TTS] {last_error}")
+
+    raise HTTPException(502, f"Inworld research TTS failed: {last_error}")
+
+def research_voice_cache_key(
+    text: str,
+    *,
+    voice_id: str,
+    emotion_family: str,
+    model_id: str,
+) -> str:
+    payload = {
+        "text": text.strip(),
+        "voice_id": voice_id.strip(),
+        "emotion_family": emotion_family,
+        "model_id": model_id,
+        "cache_version": 1,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+def research_voice_cache_path(cache_key: str) -> pathlib.Path:
+    return pathlib.Path(RESEARCH_VOICE_CACHE_DIR) / f"{cache_key}.mp3"
+
 # ── Inworld session helper ────────────────────────────────────────────────────
 def is_open(conn) -> bool:
     try:
@@ -357,6 +506,9 @@ app.add_middleware(
 async def startup():
     print(f"✓ Voice: {VOICE_ID}")
     print("✓ Realtime API ready")
+    if _db is None:
+        print("  MongoDB not configured; twin CRUD disabled for this process")
+        return
     # Single deduplication key: coreIdentity.name (player name), which is exactly
     # how the fan app merges twins. We previously also kept a unique _wiki_id index;
     # combining two unique indexes meant an upsert filtered on one key could collide
@@ -389,11 +541,13 @@ class AskResponse(BaseModel):
 
 @app.post("/twin/ask", response_model=AskResponse)
 async def ask(req: AskRequest):
+    if openai_client is None:
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured")
     message = openai_client.chat.completions.create(
         model="gpt-4o-mini",
         max_tokens=100,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": DAVID_REALTIME_PROMPT},
             {"role": "user",   "content": req.question},
         ],
     )
@@ -482,6 +636,16 @@ class SpeakRequest(BaseModel):
 class SpeakResponse(BaseModel):
     audio_base64: str
 
+class ResearchSpeakRequest(BaseModel):
+    text: str
+    emotion_family: str = "Character"
+    voice_id: str = ""
+    model_id: str = RESEARCH_TTS_MODEL
+
+class ResearchSpeakResponse(BaseModel):
+    audio_base64: str
+    meta: dict
+
 class BeatItem(BaseModel):
     index: int
     text:  str
@@ -496,6 +660,73 @@ class PregenerateResponse(BaseModel):
 async def speak(req: SpeakRequest):
     audio = synthesize_audio(req.text, req.instruct)
     return SpeakResponse(audio_base64=base64.b64encode(audio).decode("utf-8"))
+
+@app.post("/api/research/voice/speak", response_model=ResearchSpeakResponse)
+async def research_voice_speak(req: ResearchSpeakRequest):
+    text = req.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is required")
+
+    voice_id = (req.voice_id or WALT_VOICE_ID).strip()
+    model_id = req.model_id or RESEARCH_TTS_MODEL
+    if not voice_id:
+        raise HTTPException(
+            status_code=400,
+            detail="A cloned Inworld voice ID is required. Set WALT_VOICE_ID on the backend or pass voice_id.",
+        )
+
+    cache_key = research_voice_cache_key(
+        text,
+        voice_id=voice_id,
+        emotion_family=req.emotion_family,
+        model_id=model_id,
+    )
+    cache_path = research_voice_cache_path(cache_key)
+    if cache_path.exists():
+        audio = cache_path.read_bytes()
+        return ResearchSpeakResponse(
+            audio_base64=base64.b64encode(audio).decode("utf-8"),
+            meta={
+                "mode": "cache",
+                "model": model_id,
+                "emotion_family": req.emotion_family,
+                "voice_id": voice_id,
+                "cache_key": cache_key,
+                "cached": True,
+                "cache_url": f"/static/research_voice/{cache_key}.mp3",
+            },
+        )
+
+    try:
+        audio, meta = await asyncio.to_thread(
+            synthesize_research_audio,
+            text,
+            voice_id=voice_id,
+            emotion_family=req.emotion_family,
+            model_id=model_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Research TTS] synthesis skipped: {e}")
+        raise HTTPException(status_code=502, detail="Research voice synthesis failed")
+
+    try:
+        cache_path.write_bytes(audio)
+    except Exception as e:
+        print(f"[Research TTS] cache write skipped: {e}")
+
+    meta = {
+        **meta,
+        "voice_id": voice_id,
+        "cache_key": cache_key,
+        "cached": False,
+        "cache_url": f"/static/research_voice/{cache_key}.mp3",
+    }
+    return ResearchSpeakResponse(
+        audio_base64=base64.b64encode(audio).decode("utf-8"),
+        meta=meta,
+    )
 
 @app.post("/twin/pregenerate", response_model=PregenerateResponse)
 async def pregenerate(req: PregenerateRequest):
