@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { FEATURED_HERO, FEATURED_PICKS, FILTERS, LEGENDS } from "../data/athletes";
+import { fetchRemoteLegends } from "../data/remoteTwins";
 import { getFanExperienceSnapshot } from "../lib/fanExperience";
 import AthleteCard from "./AthleteCard";
 import FanNotificationBell from "./notifications/FanNotificationBell";
