@@ -27,10 +27,10 @@ from datetime import datetime
 
 # ── Config ───────────────────────────────────────────────────────────────────
 INWORLD_API_KEY = os.environ.get("INWORLD_API_KEY", "")
-ANTHROPIC_API_KEY  = os.environ.get("ANTHROPIC_API_KEY", "")
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_TEXT_MODEL = os.environ.get("OPENAI_TEXT_MODEL", "gpt-4o-mini")
 print(f"INWORLD key loaded: {bool(INWORLD_API_KEY)}")
-print(f"ANTHROPIC key loaded: {bool(ANTHROPIC_API_KEY)}")
+print(f"OPENAI key loaded: {bool(OPENAI_API_KEY)}")
 
 # Ball Don't Lie
 BDL_API_KEY  = os.environ.get("BDL_API_KEY", "")
@@ -325,22 +325,22 @@ def synthesize_audio(text: str, instruct: str = "") -> bytes:
         raise HTTPException(500, f"TTS failed: {resp.status_code} {resp.text}")
     return base64.b64decode(resp.json()["audioContent"])
 
-def generate_anthropic_text(question: str, system_prompt: str) -> str:
-    if not ANTHROPIC_API_KEY:
-        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY is not configured")
+def generate_openai_text(question: str, system_prompt: str) -> str:
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured")
 
     resp = requests.post(
-        "https://api.anthropic.com/v1/messages",
+        "https://api.openai.com/v1/chat/completions",
         headers={
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
             "content-type": "application/json",
         },
         json={
-            "model": ANTHROPIC_MODEL,
+            "model": OPENAI_TEXT_MODEL,
             "max_tokens": 160,
-            "system": system_prompt,
+            "temperature": 0.7,
             "messages": [
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": question},
             ],
         },
@@ -349,14 +349,16 @@ def generate_anthropic_text(question: str, system_prompt: str) -> str:
     if resp.status_code != 200:
         raise HTTPException(
             status_code=502,
-            detail=f"Anthropic generation failed: {resp.status_code} {resp.text[:500]}",
+            detail=f"OpenAI generation failed: {resp.status_code} {resp.text[:500]}",
         )
 
     payload = resp.json()
-    parts = payload.get("content") or []
-    text = "".join(part.get("text", "") for part in parts if part.get("type") == "text").strip()
+    choices = payload.get("choices") or []
+    text = ""
+    if choices:
+        text = ((choices[0].get("message") or {}).get("content") or "").strip()
     if not text:
-        raise HTTPException(status_code=502, detail="Anthropic generation returned empty text")
+        raise HTTPException(status_code=502, detail="OpenAI generation returned empty text")
     return text
 
 def compact_qa_profile(profile: dict[str, Any]) -> dict[str, Any]:
@@ -613,7 +615,7 @@ class ProfileAskResponse(BaseModel):
 
 @app.post("/twin/ask", response_model=AskResponse)
 async def ask(req: AskRequest):
-    text = generate_anthropic_text(req.question, DAVID_REALTIME_PROMPT)
+    text = generate_openai_text(req.question, DAVID_REALTIME_PROMPT)
     audio = synthesize_audio(text)
     return AskResponse(text=text, audio_base64=base64.b64encode(audio).decode("utf-8"))
 
@@ -622,7 +624,7 @@ async def generate_profile_answer(req: ProfileAskRequest):
     question = req.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question is required")
-    text = generate_anthropic_text(question, build_profile_qa_prompt(req.profile))
+    text = generate_openai_text(question, build_profile_qa_prompt(req.profile))
     return ProfileAskResponse(text=text)
 
 # ── WebSocket Q&A ─────────────────────────────────────────────────────────────
