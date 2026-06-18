@@ -16,7 +16,6 @@ import pathlib
 import requests
 import websockets as ws_lib
 from websockets.protocol import State
-from openai import OpenAI
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -28,9 +27,10 @@ from datetime import datetime
 
 # ── Config ───────────────────────────────────────────────────────────────────
 INWORLD_API_KEY = os.environ.get("INWORLD_API_KEY", "")
-OPENAI_API_KEY  = os.environ.get("OPENAI_API_KEY", "")
+ANTHROPIC_API_KEY  = os.environ.get("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
 print(f"INWORLD key loaded: {bool(INWORLD_API_KEY)}")
-print(f"OPENAI key loaded: {bool(OPENAI_API_KEY)}")
+print(f"ANTHROPIC key loaded: {bool(ANTHROPIC_API_KEY)}")
 
 # Ball Don't Lie
 BDL_API_KEY  = os.environ.get("BDL_API_KEY", "")
@@ -103,8 +103,6 @@ SESSION_CONFIG = {
         "audio": {"output": {"voice": VOICE_ID, "model": TTS_MODEL}},
     },
 }
-
-openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # MongoDB
 MONGODB_URI = os.environ.get("MONGODB_URI")
@@ -327,6 +325,40 @@ def synthesize_audio(text: str, instruct: str = "") -> bytes:
         raise HTTPException(500, f"TTS failed: {resp.status_code} {resp.text}")
     return base64.b64decode(resp.json()["audioContent"])
 
+def generate_anthropic_text(question: str, system_prompt: str) -> str:
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY is not configured")
+
+    resp = requests.post(
+        "https://api.anthropic.com/v1/messages",
+        headers={
+            "x-api-key": ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        json={
+            "model": ANTHROPIC_MODEL,
+            "max_tokens": 160,
+            "system": system_prompt,
+            "messages": [
+                {"role": "user", "content": question},
+            ],
+        },
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Anthropic generation failed: {resp.status_code} {resp.text[:500]}",
+        )
+
+    payload = resp.json()
+    parts = payload.get("content") or []
+    text = "".join(part.get("text", "") for part in parts if part.get("type") == "text").strip()
+    if not text:
+        raise HTTPException(status_code=502, detail="Anthropic generation returned empty text")
+    return text
+
 RESEARCH_EMOTION_STEERING = {
     "Intensity": {
         "instruction": "Speak with contained intensity: focused, forceful, and urgent without shouting.",
@@ -541,17 +573,7 @@ class AskResponse(BaseModel):
 
 @app.post("/twin/ask", response_model=AskResponse)
 async def ask(req: AskRequest):
-    if openai_client is None:
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured")
-    message = openai_client.chat.completions.create(
-        model="gpt-4o-mini",
-        max_tokens=100,
-        messages=[
-            {"role": "system", "content": DAVID_REALTIME_PROMPT},
-            {"role": "user",   "content": req.question},
-        ],
-    )
-    text  = message.choices[0].message.content
+    text = generate_anthropic_text(req.question, DAVID_REALTIME_PROMPT)
     audio = synthesize_audio(text)
     return AskResponse(text=text, audio_base64=base64.b64encode(audio).decode("utf-8"))
 
