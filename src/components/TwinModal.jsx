@@ -350,15 +350,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   const playNonStreamingQaAnswer = async (question, assistantIndex) => {
     const generated = await generateProfileQaAnswer(question);
     const reply = generated?.text || answerQuestion(athlete, question);
-    await streamText(reply, (token) => {
-      setMessages(p => p.map((m, i) =>
-        i === assistantIndex
-          ? { ...m, content: `${m.content || ""}${token}`, streaming: true }
-          : m
-      ));
-    });
     setMessages(p => p.map((m, i) =>
-      i === assistantIndex ? { ...m, streaming: false } : m
+      i === assistantIndex ? { ...m, content: reply, streaming: false } : m
     ));
     setLoading(false);
     const audioBase64 = await synthesizeAthleteVoice(reply, "Character");
@@ -446,6 +439,11 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     wsRef.current = socket;
     socket.onopen  = () => {
       console.log("✓ Realtime WS connected");
+      socket.send(JSON.stringify({
+        type: "configure",
+        voice_id: narratorVoiceIdForAthlete(athlete),
+        profile: athlete,
+      }));
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       heartbeatRef.current = setInterval(() => {
         if (socket.readyState === WebSocket.OPEN) {
@@ -726,20 +724,16 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     currentMsgRef.current = { index: null, buffer: "", audioStarted: false, question: null };
     setMessages(p => [...p, { role: "assistant", content: "", streaming: true }]);
 
-    void (async () => {
-      try {
-        await playNonStreamingQaAnswer(question, assistantIndex);
-      } catch {
-        setMessages(p => p.map((m, i) =>
-          i === assistantIndex
-            ? { role: "assistant", content: STREAM_ERROR_MESSAGE, streaming: false, error: true }
-            : m
-        ));
-        setLoading(false);
-        setVoiceState("idle");
-        setVoiceSessionActive(false);
-      }
-    })();
+    currentMsgRef.current = { index: assistantIndex, buffer: "", audioStarted: false, question };
+    pendingQuestionRef.current = question;
+
+    if (wsRef.current?.readyState === WebSocket.OPEN && wsReadyRef.current) {
+      wsRef.current.send(JSON.stringify({ type: "question", text: question }));
+      pendingQuestionRef.current = null;
+      startResponseTimer();
+    } else {
+      openRealtimeWS();
+    }
   };
 
   const sendSuggestedPrompt = (prompt) => {

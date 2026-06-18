@@ -93,16 +93,23 @@ DAVID_REALTIME_PROMPT = f"{SYSTEM_PROMPT}\n\n{DAVID_NONVERBAL_VOICE_PROMPT}"
 INWORLD_REALTIME_URL = "wss://api.inworld.ai/api/v1/realtime/session?key=ricon-twin&protocol=realtime"
 INWORLD_WS_HEADERS   = {"Authorization": f"Basic {INWORLD_API_KEY}"}
 
-SESSION_CONFIG = {
-    "type": "session.update",
-    "session": {
-        "model": "openai/gpt-4o-mini",
-        "instructions": DAVID_REALTIME_PROMPT,
-        "output_modalities": ["audio", "text"],
-        "max_output_tokens": 100,
-        "audio": {"output": {"voice": VOICE_ID, "model": TTS_MODEL}},
-    },
-}
+def build_realtime_session_config(
+    *,
+    instructions: str = DAVID_REALTIME_PROMPT,
+    voice_id: str = VOICE_ID,
+) -> dict:
+    return {
+        "type": "session.update",
+        "session": {
+            "model": "openai/gpt-4o-mini",
+            "instructions": instructions,
+            "output_modalities": ["audio", "text"],
+            "max_output_tokens": 100,
+            "audio": {"output": {"voice": voice_id, "model": TTS_MODEL}},
+        },
+    }
+
+SESSION_CONFIG = build_realtime_session_config()
 
 # MongoDB
 MONGODB_URI = os.environ.get("MONGODB_URI")
@@ -532,7 +539,8 @@ def is_open(conn) -> bool:
     except Exception:
         return False
 
-async def open_inworld_session():
+async def open_inworld_session(session_config: dict | None = None):
+    config = session_config or SESSION_CONFIG
     inworld = await ws_lib.connect(
         INWORLD_REALTIME_URL,
         additional_headers=INWORLD_WS_HEADERS,
@@ -545,7 +553,7 @@ async def open_inworld_session():
                 event = json.loads(raw)
                 t = event.get("type", "")
                 if t == "session.created":
-                    await inworld.send(json.dumps(SESSION_CONFIG))
+                    await inworld.send(json.dumps(config))
                 elif t == "session.updated":
                     print("✓ Inworld session ready")
                     return inworld
@@ -633,22 +641,50 @@ async def twin_ws(browser: WebSocket):
     await browser.accept()
     print("Browser connected")
     inworld = None
+    session_config = SESSION_CONFIG
     try:
-        inworld = await open_inworld_session()
-        await browser.send_json({"type": "ready"})
         while True:
             msg = await browser.receive_json()
             if msg.get("type") == "ping":
+                continue
+            if msg.get("type") == "configure":
+                profile = msg.get("profile") or {}
+                voice_id = (msg.get("voice_id") or VOICE_ID).strip()
+                instructions = build_profile_qa_prompt(profile) if profile else DAVID_REALTIME_PROMPT
+                session_config = build_realtime_session_config(
+                    instructions=instructions,
+                    voice_id=voice_id or VOICE_ID,
+                )
+                if inworld is not None:
+                    try:
+                        await inworld.close()
+                    except Exception:
+                        pass
+                    inworld = None
+                try:
+                    inworld = await open_inworld_session(session_config)
+                    await browser.send_json({"type": "ready"})
+                except Exception as e:
+                    print(f"Configure failed: {e}")
+                    await browser.send_json({"type": "error", "message": "configure_failed"})
                 continue
             if msg.get("type") != "question":
                 continue
             text = msg.get("text", "").strip()
             if not text:
                 continue
+            if inworld is None:
+                try:
+                    inworld = await open_inworld_session(session_config)
+                    await browser.send_json({"type": "ready"})
+                except Exception as e:
+                    print(f"Session open failed: {e}")
+                    await browser.send_json({"type": "error", "message": "session_failed"})
+                    continue
             if not is_open(inworld):
                 print("Reconnecting to Inworld...")
                 try:
-                    inworld = await open_inworld_session()
+                    inworld = await open_inworld_session(session_config)
                 except Exception as e:
                     print(f"Reconnect failed: {e}")
                     await browser.send_json({"type": "error", "message": "reconnect_failed"})
