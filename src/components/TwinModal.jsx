@@ -5,7 +5,7 @@ const WS_BASE  = (import.meta.env.VITE_TWIN_API_URL || "https://ricon-storyline-
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const STREAM_ERROR_MESSAGE = "This moment is unavailable from the verified archive. Try a different question.";
-const NARRATOR_VOICE_CACHE_KEY = "ricon:narrator-voice-cache:v2";
+const NARRATOR_VOICE_CACHE_KEY = "ricon:narrator-voice-cache:v3";
 const NARRATOR_VOICE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const NARRATOR_MODEL_ID = "inworld-tts-2";
 
@@ -265,32 +265,53 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     nextPlayRef.current = 0;
   };
 
-  const sendQAFallbackREST = async (question, idx) => {
-    try {
-      const res = await fetch(`${API_BASE}/twin/ask`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, athlete_id: athlete.id }),
-      });
-      if (!res.ok) throw new Error("REST fallback failed");
-      const { audio_base64 } = await res.json();
-      if (audio_base64) {
-        if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
-        const bytes = Uint8Array.from(atob(audio_base64), c => c.charCodeAt(0));
-        const blob  = new Blob([bytes], { type: "audio/mp3" });
-        const audio = new Audio(URL.createObjectURL(blob));
-        audioRef.current = audio;
-        audio.play().catch(() => {});
-      }
-      setMessages(p => p.map((m, i) => i === idx ? { ...m, content: "", streaming: false } : m));
-    } catch (e) {
-      console.error("REST fallback failed:", e);
-      setMessages(p => p.map((m, i) => i === idx ? { role: "assistant", content: STREAM_ERROR_MESSAGE, streaming: false, error: true } : m));
-    } finally {
-      setLoading(false);
+  const playAudioBase64 = (audioBase64) => {
+    if (!audioBase64) return false;
+    if (audioRef.current) {
+      audioRef.current.pause?.();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    const src = base64ToAudioUrl(audioBase64);
+    const audio = new Audio(src);
+    audioRef.current = audio;
+    audio.onplay = () => setVoiceState("speaking");
+    audio.onended = () => {
+      URL.revokeObjectURL(src);
       setVoiceState("idle");
       setVoiceSessionActive(false);
-    }
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(src);
+      setVoiceState("idle");
+      setVoiceSessionActive(false);
+    };
+    audio.play().catch(() => {
+      URL.revokeObjectURL(src);
+      setVoiceState("idle");
+      setVoiceSessionActive(false);
+    });
+    return true;
+  };
+
+  const synthesizeAthleteVoice = async (text, emotionFamily = "Character") => {
+    const voiceId = narratorVoiceIdForAthlete(athlete);
+    const response = await fetch(
+      `${API_BASE.replace(/\/$/, "")}/api/research/voice/speak`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          emotion_family: emotionFamily,
+          voice_id: voiceId,
+          model_id: NARRATOR_MODEL_ID,
+        }),
+      },
+    );
+    if (!response.ok) return null;
+    const payload = await response.json();
+    return payload.audio_base64 || null;
   };
 
   const finalizeCurrent = (isError = false) => {
@@ -302,9 +323,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     currentMsgRef.current = { index: null, buffer: "", audioStarted: false, question: null };
 
     if (isError && question) {
-      console.warn("Realtime failed — falling back to REST");
-      sendQAFallbackREST(question, idx);
-      return;
+      console.warn("Realtime failed");
     }
     setMessages(p => p.map((m, i) =>
       i === idx
@@ -681,34 +700,44 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     setMessages(p => [...p, { role: "user", content: question }]);
     setInput("");
     setLoading(true);
+    setVoiceState("thinking");
     stopStreamingAudio();
 
     const assistantIndex = messages.length + 1;
-    currentMsgRef.current = { index: assistantIndex, buffer: "", audioStarted: false, question };
+    currentMsgRef.current = { index: null, buffer: "", audioStarted: false, question: null };
     setMessages(p => [...p, { role: "assistant", content: "", streaming: true }]);
 
-    // Ensure WS open
-    if (!wsRef.current ||
-        wsRef.current.readyState === WebSocket.CLOSED ||
-        wsRef.current.readyState === WebSocket.CLOSING) {
-      openRealtimeWS();
-    }
-
-    const socket = wsRef.current;
-    if (!socket) { finalizeCurrent(true); return; }
-
-    if (wsReadyRef.current && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "question", text: question }));
-      startResponseTimer();
-    } else {
-      pendingQuestionRef.current = question;
-      setTimeout(() => {
-        if (pendingQuestionRef.current === question) {
-          pendingQuestionRef.current = null;
-          finalizeCurrent(true); // WS never became ready — fall back to REST
+    void (async () => {
+      const reply = answerQuestion(athlete, question);
+      try {
+        await streamText(reply, (token) => {
+          setMessages(p => p.map((m, i) =>
+            i === assistantIndex
+              ? { ...m, content: `${m.content || ""}${token}`, streaming: true }
+              : m
+          ));
+        });
+        setMessages(p => p.map((m, i) =>
+          i === assistantIndex ? { ...m, streaming: false } : m
+        ));
+        setLoading(false);
+        const audioBase64 = await synthesizeAthleteVoice(reply, "Character");
+        if (audioBase64) {
+          playAudioBase64(audioBase64);
+        } else {
+          speakReply(reply);
         }
-      }, 20000);
-    }
+      } catch {
+        setMessages(p => p.map((m, i) =>
+          i === assistantIndex
+            ? { role: "assistant", content: STREAM_ERROR_MESSAGE, streaming: false, error: true }
+            : m
+        ));
+        setLoading(false);
+        setVoiceState("idle");
+        setVoiceSessionActive(false);
+      }
+    })();
   };
 
   const sendSuggestedPrompt = (prompt) => {
