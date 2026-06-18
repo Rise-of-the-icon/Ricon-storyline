@@ -21,7 +21,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import List
+from typing import Any, List
 from motor.motor_asyncio import AsyncIOMotorClient
 from fastapi import Request
 from datetime import datetime
@@ -539,6 +539,14 @@ class AskResponse(BaseModel):
     text:         str
     audio_base64: str
 
+class StorylineAskRequest(BaseModel):
+    question: str
+    profile: dict[str, Any]
+
+class StorylineAskResponse(BaseModel):
+    text: str
+    generated_by: str
+
 @app.post("/twin/ask", response_model=AskResponse)
 async def ask(req: AskRequest):
     if openai_client is None:
@@ -554,6 +562,115 @@ async def ask(req: AskRequest):
     text  = message.choices[0].message.content
     audio = synthesize_audio(text)
     return AskResponse(text=text, audio_base64=base64.b64encode(audio).decode("utf-8"))
+
+def _compact_storyline_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    moments = profile.get("moments") or []
+    compact_moments = []
+    for moment in moments[:12]:
+        compact_moments.append({
+            "year": moment.get("y") or moment.get("year") or "",
+            "era": moment.get("era") or "",
+            "type": moment.get("type") or "",
+            "title": moment.get("title") or "",
+            "body": moment.get("body") or moment.get("description") or moment.get("summary") or "",
+            "source": moment.get("source") or moment.get("src") or "",
+        })
+
+    return {
+        "name": profile.get("name") or "",
+        "role": profile.get("position") or profile.get("genreLabel") or profile.get("leagueLabel") or "",
+        "years": profile.get("years") or "",
+        "tagline": profile.get("tagline") or "",
+        "teams_or_credits": profile.get("teams") or profile.get("credits") or "",
+        "stats": profile.get("stats") or [],
+        "moments": compact_moments,
+    }
+
+def _first_person_storyline_text(text: str, name: str) -> str:
+    line = str(text or "")
+    full_name = str(name or "").strip()
+    if full_name:
+        line = re.sub(rf"\b{re.escape(full_name)}\b", "I", line, flags=re.IGNORECASE)
+    for token in re.findall(r"[A-Za-z]+", full_name):
+        if token.lower() in {"aka", "the"} or len(token) <= 2:
+            continue
+        line = re.sub(rf"\b{re.escape(token)}\b", "I", line, flags=re.IGNORECASE)
+    replacements = [
+        (r"\bhe was\b", "I was"),
+        (r"\bshe was\b", "I was"),
+        (r"\bhe is\b", "I am"),
+        (r"\bshe is\b", "I am"),
+        (r"\bhis\b", "my"),
+        (r"\bher\b", "my"),
+        (r"\bhim\b", "me"),
+    ]
+    for pattern, replacement in replacements:
+        line = re.sub(pattern, replacement, line, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", line).strip()
+
+def _fallback_storyline_answer(question: str, compact: dict[str, Any]) -> str:
+    name = compact.get("name") or "this person"
+    moments = compact.get("moments") or []
+    selected = moments[-1] if moments else {}
+    lowered = question.lower()
+    for moment in moments:
+        haystack = f"{moment.get('year', '')} {moment.get('title', '')} {moment.get('body', '')}".lower()
+        if any(word for word in lowered.split() if len(word) > 4 and word in haystack):
+            selected = moment
+            break
+    if selected:
+        return _first_person_storyline_text((
+            f"I can speak to that from my verified record. "
+            f"In {selected.get('year', '')}, {selected.get('title', '')}: "
+            f"{selected.get('body', '')}"
+        ).strip(), name)
+    return f"I am {name}. I can only answer from the verified profile data available here."
+
+@app.post("/api/storyline/ask", response_model=StorylineAskResponse)
+async def storyline_ask(req: StorylineAskRequest):
+    question = req.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question is required")
+
+    compact = _compact_storyline_profile(req.profile)
+    name = compact.get("name") or "the subject"
+
+    if openai_client is None:
+        return StorylineAskResponse(
+            text=_fallback_storyline_answer(question, compact),
+            generated_by="fallback",
+        )
+
+    message = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        max_tokens=160,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    f"You are {name}'s RICON digital twin. Answer strictly in first person as {name}. "
+                    "Use only the verified profile JSON provided. Do not mention being an AI, a model, a profile, "
+                    "or a dataset. If the question is outside the verified data, say what you can speak to from the "
+                    "verified record and do not invent facts. Keep the answer concise, natural, and spoken-audio friendly."
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "verified_profile": compact,
+                        "question": question,
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        ],
+    )
+    text = (message.choices[0].message.content or "").strip()
+    if not text:
+        text = _fallback_storyline_answer(question, compact)
+        return StorylineAskResponse(text=text, generated_by="fallback")
+    return StorylineAskResponse(text=_first_person_storyline_text(text, name), generated_by="openai")
 
 # ── WebSocket Q&A ─────────────────────────────────────────────────────────────
 @app.websocket("/twin/ws")

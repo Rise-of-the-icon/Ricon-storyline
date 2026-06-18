@@ -1,4 +1,7 @@
-const RAILWAY_URL = "https://ricon-storyline-production.up.railway.app";
+const TWIN_DATA_API_BASE =
+  import.meta.env.VITE_TWIN_DATA_API_URL ||
+  import.meta.env.VITE_STORYLINE_DATA_API_URL ||
+  "https://ricon-storyline-production.up.railway.app";
 
 function normalizeWhitespace(value = "") {
   return value.replace(/\s+/g, " ").trim();
@@ -66,8 +69,8 @@ function extractYears(timeline) {
   return `${years[0]} – ${years[years.length - 1]}`;
 }
 
-function isPublicTimelineEvent(event) {
-  return event?.visibility === "Public" && event?.approvalStatus === "Reviewed";
+function isReviewedTimelineEvent(event) {
+  return event?.approvalStatus === "Reviewed";
 }
 
 function isPublicCustomMoment(moment) {
@@ -76,9 +79,9 @@ function isPublicCustomMoment(moment) {
 
 function isPublishableTwin(twin) {
   if (twin?.draftStatus !== "saved") return false;
-  const publicTimeline = (twin.timeline || []).some(isPublicTimelineEvent);
+  const reviewedTimeline = (twin.timeline || []).some(isReviewedTimelineEvent);
   const publicMoments = (twin.customMoments || []).some(isPublicCustomMoment);
-  return publicTimeline || publicMoments;
+  return reviewedTimeline || publicMoments;
 }
 
 function isPlaceholderText(value = "") {
@@ -153,7 +156,7 @@ export function transformTwinToLegend(twin, options = {}) {
   const wiki   = twin.wikipedia || {};
   const bdl    = twin.bdl_verified_stats || {};
   const timeline = (twin.timeline || [])
-    .filter(isPublicTimelineEvent)
+    .filter(isReviewedTimelineEvent)
     .sort((a, b) => (a.year || 0) - (b.year || 0));
   const customMoments = (twin.customMoments || []).filter(isPublicCustomMoment);
 
@@ -221,7 +224,7 @@ export function transformTwinToLegend(twin, options = {}) {
 
 export async function fetchRemoteLegends() {
   try {
-    const res = await fetch(`${RAILWAY_URL}/api/twins`);
+    const res = await fetch(`${TWIN_DATA_API_BASE.replace(/\/$/, "")}/api/twins`);
     if (!res.ok) {
       console.warn(`[remoteTwins] API returned ${res.status}`);
       return [];

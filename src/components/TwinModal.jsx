@@ -86,12 +86,37 @@ const narratorBeats = [
   },
 ];
 
+function firstPersonLine(text, athleteName) {
+  const escapeRegExp = (value) => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const nameTokens = String(athleteName || "")
+    .match(/[A-Za-z]+/g)
+    ?.filter(token => token.length > 2 && !["aka", "the"].includes(token.toLowerCase())) || [];
+  let line = String(text || "");
+  if (athleteName) {
+    line = line.replace(new RegExp(`\\b${escapeRegExp(athleteName)}\\b`, "gi"), "I");
+  }
+  nameTokens.forEach((token) => {
+    line = line.replace(new RegExp(`\\b${escapeRegExp(token)}\\b`, "gi"), "I");
+  });
+  return line
+    .replace(/\bhe was\b/gi, "I was")
+    .replace(/\bshe was\b/gi, "I was")
+    .replace(/\bhe is\b/gi, "I am")
+    .replace(/\bshe is\b/gi, "I am")
+    .replace(/\bhis\b/gi, "my")
+    .replace(/\bher\b/gi, "my")
+    .replace(/\bhim\b/gi, "me")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const buildNarratorMessage = (athlete, beatIndex) => {
   const beat = narratorBeats[beatIndex % narratorBeats.length];
   const moment = beat.getMoment(athlete);
+  const line = beat.line(athlete);
   return {
     role: "assistant",
-    content: beat.line(athlete),
+    content: firstPersonLine(line, athlete.name),
     moment,
     media: beat.media,
   };
@@ -705,20 +730,27 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
 
     const assistantIndex = messages.length + 1;
     currentMsgRef.current = { index: null, buffer: "", audioStarted: false, question: null };
-    setMessages(p => [...p, { role: "assistant", content: "", streaming: true }]);
+    setMessages(p => [...p, { role: "assistant", content: "", streaming: true, audioOnly: true }]);
 
     void (async () => {
-      const reply = answerQuestion(athlete, question);
+      let reply = "";
       try {
-        await streamText(reply, (token) => {
-          setMessages(p => p.map((m, i) =>
-            i === assistantIndex
-              ? { ...m, content: `${m.content || ""}${token}`, streaming: true }
-              : m
-          ));
+        const response = await fetch(`${API_BASE.replace(/\/$/, "")}/api/storyline/ask`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question,
+            profile: athlete,
+          }),
         });
+        if (response.ok) {
+          const payload = await response.json();
+          reply = payload.text || "";
+        }
+        if (!reply) reply = answerQuestion(athlete, question);
+        reply = firstPersonLine(reply, athlete.name);
         setMessages(p => p.map((m, i) =>
-          i === assistantIndex ? { ...m, streaming: false } : m
+          i === assistantIndex ? { ...m, content: "", streaming: false, audioOnly: true } : m
         ));
         setLoading(false);
         const audioBase64 = await synthesizeAthleteVoice(reply, "Character");
@@ -958,7 +990,9 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
                 </div>
               )}
 
-            {messages.map((msg, i) => (
+            {messages.map((msg, i) => {
+              if (mode === "qa") return null;
+              return (
               <div key={i} className={`${mode === "narrator" ? "message narrator-beat" : "message"}${msg.prewarmed ? " prewarm-fade" : ""}`}>
                 {msg.role === "user" ? (
                   <div className="user-message">
@@ -1002,7 +1036,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
                   </div>
                 )}
               </div>
-            ))}
+            )})}
 
             {loading && mode !== "qa" && (
               <div className="assistant-message" style={{ animation: "fadeIn 0.3s ease" }}>
