@@ -87,18 +87,7 @@ const narratorBeats = [
 ];
 
 function firstPersonLine(text, athleteName) {
-  const escapeRegExp = (value) => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const nameTokens = String(athleteName || "")
-    .match(/[A-Za-z]+/g)
-    ?.filter(token => token.length > 2 && !["aka", "the"].includes(token.toLowerCase())) || [];
-  let line = String(text || "");
-  if (athleteName) {
-    line = line.replace(new RegExp(`\\b${escapeRegExp(athleteName)}\\b`, "gi"), "I");
-  }
-  nameTokens.forEach((token) => {
-    line = line.replace(new RegExp(`\\b${escapeRegExp(token)}\\b`, "gi"), "I");
-  });
-  return line
+  return String(text || "")
     .replace(/\bhe was\b/gi, "I was")
     .replace(/\bshe was\b/gi, "I was")
     .replace(/\bhe is\b/gi, "I am")
@@ -116,7 +105,7 @@ const buildNarratorMessage = (athlete, beatIndex) => {
   const line = beat.line(athlete);
   return {
     role: "assistant",
-    content: firstPersonLine(line, athlete.name),
+    content: line,
     moment,
     media: beat.media,
   };
@@ -965,14 +954,6 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
                   <div className="qa-empty-state">
                     <div className="empty-title">Ask from the verified archive</div>
                     <div className="empty-meta">Every response draws from documented moments, cited sources, and verified records.</div>
-                    <div className="voice-prompts compact">
-                      {voicePrompts.map(prompt => (
-                        <button key={prompt.label} type="button" className="voice-chip" onClick={() => sendSuggestedPrompt(prompt.prompt)}>
-                          <span aria-hidden="true">{prompt.icon}</span>
-                          {prompt.label}
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 ) : (
                   <div className="empty-state">
@@ -987,6 +968,17 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
                   {voiceState === "listening" && "Listening. Ask naturally."}
                   {voiceState === "thinking" && "Checking verified records."}
                   {voiceState === "speaking" && "Speaking response."}
+                </div>
+              )}
+
+              {mode === "qa" && (
+                <div className="voice-prompts compact">
+                  {voicePrompts.map(prompt => (
+                    <button key={prompt.label} type="button" className="voice-chip" onClick={() => sendSuggestedPrompt(prompt.prompt)}>
+                      <span aria-hidden="true">{prompt.icon}</span>
+                      {prompt.label}
+                    </button>
+                  ))}
                 </div>
               )}
 

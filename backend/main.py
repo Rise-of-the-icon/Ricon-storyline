@@ -589,6 +589,12 @@ def _compact_storyline_profile(profile: dict[str, Any]) -> dict[str, Any]:
 def _first_person_storyline_text(text: str, name: str) -> str:
     line = str(text or "")
     full_name = str(name or "").strip()
+    protected = {}
+    if full_name:
+        for idx, match in enumerate(re.finditer(rf"\b(I am|I'm)\s+{re.escape(full_name)}\b", line, flags=re.IGNORECASE)):
+            key = f"__FIRST_PERSON_NAME_{idx}__"
+            protected[key] = match.group(0)
+            line = line.replace(match.group(0), key, 1)
     if full_name:
         line = re.sub(rf"\b{re.escape(full_name)}\b", "I", line, flags=re.IGNORECASE)
     for token in re.findall(r"[A-Za-z]+", full_name):
@@ -606,6 +612,8 @@ def _first_person_storyline_text(text: str, name: str) -> str:
     ]
     for pattern, replacement in replacements:
         line = re.sub(pattern, replacement, line, flags=re.IGNORECASE)
+    for key, value in protected.items():
+        line = line.replace(key, value)
     return re.sub(r"\s+", " ", line).strip()
 
 def _fallback_storyline_answer(question: str, compact: dict[str, Any]) -> str:
