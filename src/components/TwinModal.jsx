@@ -5,6 +5,16 @@ const WS_BASE  = (import.meta.env.VITE_TWIN_API_URL || "https://ricon-storyline-
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const STREAM_ERROR_MESSAGE = "This moment is unavailable from the verified archive. Try a different question.";
+const NARRATOR_VOICE_CACHE_KEY = "ricon:narrator-voice-cache:v1";
+const NARRATOR_VOICE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const NARRATOR_MODEL_ID = "inworld-tts-2";
+
+const NARRATOR_VOICE_ID_BY_MERGE_KEY = {
+  "david west": "default--z5zasdfwci5ofrt-gmsjw__test",
+  "tom hoover": "default--z5zasdfwci5ofrt-gmsjw__tom_hoover",
+  "walt liquor": "default--z5zasdfwci5ofrt-gmsjw__walt",
+  "walt taylor aka walt liquor": "default--z5zasdfwci5ofrt-gmsjw__walt",
+};
 
 const clean = (value) => value.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
 const STOP_WORDS = new Set(["what", "when", "where", "your", "were", "with", "that", "this", "from", "about", "moment"]);
@@ -127,6 +137,40 @@ const voicePrompts = [
   { icon: "◌", label: "Ask about the mindset", prompt: "What mindset separated you from everyone else?" },
   { icon: "◇", label: "Explain the legacy", prompt: "How should people understand your legacy?" },
 ];
+
+function narratorVoiceIdForAthlete(athlete) {
+  const key = clean(athlete?.name || "").replace(/\s+/g, " ").trim();
+  return (
+    NARRATOR_VOICE_ID_BY_MERGE_KEY[key] ||
+    import.meta.env.VITE_WALT_VOICE_ID ||
+    "default--z5zasdfwci5ofrt-gmsjw__walt"
+  );
+}
+
+function narratorCacheId({ athleteName, beatIndex, text, voiceId }) {
+  const textPart = btoa(unescape(encodeURIComponent(text))).slice(0, 64);
+  return `${clean(athleteName).trim()}::${beatIndex}::${voiceId}::${textPart}`;
+}
+
+function readNarratorCache() {
+  try {
+    const raw = window.localStorage.getItem(NARRATOR_VOICE_CACHE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function writeNarratorCache(cache) {
+  try {
+    window.localStorage.setItem(NARRATOR_VOICE_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // best-effort cache only
+  }
+}
 
 export const OPENING_NARRATIVE_PROMPT = "Begin the story of your career from the beginning, in one paragraph.";
 
@@ -414,19 +458,76 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   }, []);
 
   const playNarratorAudio = (beatIndex) => {
-    try {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-      setTimeout(() => {
-        const src = `/beat_${beatIndex}.mp3`;
+    const run = async () => {
+      try {
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+        }
+        const beat = messages[beatIndex];
+        const text = beat?.content || buildNarratorMessage(athlete, beatIndex).content;
+        const voiceId = narratorVoiceIdForAthlete(athlete);
+        const cacheKey = narratorCacheId({
+          athleteName: athlete.name,
+          beatIndex,
+          text,
+          voiceId,
+        });
+        const cache = readNarratorCache();
+        const cached = cache[cacheKey];
+        let audioBase64 = null;
+
+        if (cached?.audioBase64 && cached?.expiresAtISO) {
+          const expiresAt = Date.parse(cached.expiresAtISO);
+          if (Number.isFinite(expiresAt) && expiresAt > Date.now()) {
+            audioBase64 = cached.audioBase64;
+          } else {
+            delete cache[cacheKey];
+            writeNarratorCache(cache);
+          }
+        }
+
+        if (!audioBase64) {
+          const response = await fetch(
+            `${API_BASE.replace(/\/$/, "")}/api/research/voice/speak`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text,
+                emotion_family: "Character",
+                voice_id: voiceId,
+                model_id: NARRATOR_MODEL_ID,
+              }),
+            },
+          );
+          if (!response.ok) {
+            throw new Error(`Narrator synthesis failed (${response.status})`);
+          }
+          const payload = await response.json();
+          audioBase64 = payload.audio_base64;
+          cache[cacheKey] = {
+            audioBase64,
+            generatedAtISO: new Date().toISOString(),
+            expiresAtISO: new Date(
+              Date.now() + NARRATOR_VOICE_CACHE_TTL_MS,
+            ).toISOString(),
+          };
+          writeNarratorCache(cache);
+        }
+
+        const bytes = Uint8Array.from(atob(audioBase64), (ch) => ch.charCodeAt(0));
+        const blob = new Blob([bytes], { type: "audio/mp3" });
+        const src = URL.createObjectURL(blob);
         const audio = new Audio(src);
         audioRef.current = audio;
         audio.onplay = () => setVoiceState("speaking");
-        audio.onended = () => setVoiceState("idle");
+        audio.onended = () => {
+          URL.revokeObjectURL(src);
+          setVoiceState("idle");
+        };
         audio.onerror = () => {
-          console.warn(`Narrator audio failed to load: ${src}`);
+          URL.revokeObjectURL(src);
           setVoiceState("idle");
         };
         audio.currentTime = 0;
@@ -448,10 +549,11 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
             window.addEventListener("keydown", narratorRetryHandlerRef.current, true);
           }
         });
-      }, 50);
-    } catch {
-      setVoiceState("idle");
-    }
+      } catch {
+        setVoiceState("idle");
+      }
+    };
+    void run();
   };
 
   const speakReply = (reply) => {

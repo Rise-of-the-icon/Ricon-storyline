@@ -17,6 +17,29 @@ export function buildLegendMergeKey(name = "") {
   return cleaned;
 }
 
+function inferLegendCategory(twin) {
+  const name = `${twin?.coreIdentity?.name || ""}`.toLowerCase();
+  const summary = `${twin?.wikipedia?.summary || ""}`.toLowerCase();
+  const description = `${twin?.wikipedia?.description || ""}`.toLowerCase();
+  const haystack = `${name} ${summary} ${description}`;
+  if (
+    /music|musician|artist|rapper|singer|producer|executive|song|album|hip[-\s]?hop|r&b|rock|jazz/.test(
+      haystack,
+    )
+  ) {
+    return {
+      cat: "music",
+      genre: "music",
+      genreLabel: "Music",
+    };
+  }
+  return {
+    cat: "sports",
+    league: "nba",
+    leagueLabel: "NBA",
+  };
+}
+
 function inferMomentType(title = "", eventType = "") {
   const t = title.toLowerCase();
   if (/draft(ed)?/.test(t)) return "draft";
@@ -107,7 +130,14 @@ function dedupeLegendsByPerson(legends) {
 }
 
 export function transformTwinToLegend(twin, options = {}) {
-  const { cat = "sports", league = "nba", leagueLabel = "NBA" } = options;
+  const inferred = inferLegendCategory(twin);
+  const {
+    cat = inferred.cat,
+    league = inferred.league,
+    leagueLabel = inferred.leagueLabel,
+    genre = inferred.genre,
+    genreLabel = inferred.genreLabel,
+  } = options;
 
   const name   = twin.coreIdentity?.name || "Unknown";
   const wiki   = twin.wikipedia || {};
@@ -169,6 +199,8 @@ export function transformTwinToLegend(twin, options = {}) {
     cat,
     league,
     leagueLabel,
+    genre,
+    genreLabel,
     _remote:    true,
     _mergeKey:  mergeKey,
     // Preserve raw API data for use in HomeScreen merge logic
