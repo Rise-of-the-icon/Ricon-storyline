@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+static/research_voice/
+src/
+.DS_Store
