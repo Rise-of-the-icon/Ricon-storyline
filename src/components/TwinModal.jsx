@@ -6,7 +6,6 @@ const WS_BASE  = (import.meta.env.VITE_TWIN_API_URL || "https://ricon-storyline-
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const STREAM_ERROR_MESSAGE = "This moment is unavailable from the verified archive. Try a different question.";
 const NARRATOR_VOICE_CACHE_KEY = "ricon:narrator-voice-cache:v3";
-const NARRATOR_VOICE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const NARRATOR_MODEL_ID = "inworld-tts-2";
 
 const NARRATOR_VOICE_ID_BY_MERGE_KEY = {
@@ -348,6 +347,34 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     }
   };
 
+  const playNonStreamingQaAnswer = async (question, assistantIndex) => {
+    const generated = await generateProfileQaAnswer(question);
+    const reply = generated?.text || answerQuestion(athlete, question);
+    await streamText(reply, (token) => {
+      setMessages(p => p.map((m, i) =>
+        i === assistantIndex
+          ? { ...m, content: `${m.content || ""}${token}`, streaming: true }
+          : m
+      ));
+    });
+    setMessages(p => p.map((m, i) =>
+      i === assistantIndex ? { ...m, streaming: false } : m
+    ));
+    setLoading(false);
+    const audioBase64 = await synthesizeAthleteVoice(reply, "Character");
+    if (audioBase64) {
+      playAudioBase64(audioBase64);
+      return;
+    }
+    setMessages(p => p.map((m, i) =>
+      i === assistantIndex
+        ? { role: "assistant", content: STREAM_ERROR_MESSAGE, streaming: false, error: true }
+        : m
+    ));
+    setVoiceState("idle");
+    setVoiceSessionActive(false);
+  };
+
   const finalizeCurrent = (isError = false) => {
     const cur = currentMsgRef.current;
     if (cur.index === null) return;
@@ -358,6 +385,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
 
     if (isError && question) {
       console.warn("Realtime failed");
+      void playNonStreamingQaAnswer(question, idx);
+      return;
     }
     setMessages(p => p.map((m, i) =>
       i === idx
@@ -465,7 +494,6 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
       recognitionRef.current.abort?.();
     }
     recognitionRef.current = null;
-    window.speechSynthesis?.cancel();
     if (audioRef.current) {
       audioRef.current.pause?.();
       audioRef.current.currentTime = 0;
@@ -547,14 +575,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
         const cached = cache[cacheKey];
         let audioBase64 = null;
 
-        if (cached?.audioBase64 && cached?.expiresAtISO) {
-          const expiresAt = Date.parse(cached.expiresAtISO);
-          if (Number.isFinite(expiresAt) && expiresAt > Date.now()) {
-            audioBase64 = cached.audioBase64;
-          } else {
-            delete cache[cacheKey];
-            writeNarratorCache(cache);
-          }
+        if (cached?.audioBase64) {
+          audioBase64 = cached.audioBase64;
         }
 
         if (!audioBase64) {
@@ -576,38 +598,18 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
               const payload = await response.json();
               audioBase64 = payload.audio_base64;
             }
-          } catch {
-            // Final fallback is browser speech synthesis. Do not call /twin/speak:
-            // that endpoint does not accept a per-athlete Inworld voice ID.
-          }
+          } catch {}
         }
 
         if (audioBase64) {
           cache[cacheKey] = {
             audioBase64,
             generatedAtISO: new Date().toISOString(),
-            expiresAtISO: new Date(
-              Date.now() + NARRATOR_VOICE_CACHE_TTL_MS,
-            ).toISOString(),
           };
           writeNarratorCache(cache);
         }
 
         if (!audioBase64) {
-          if ("speechSynthesis" in window) {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 0.9;
-            utterance.pitch = 0.82;
-            utterance.volume = 0.9;
-            utterance.onstart = () => setVoiceState("speaking");
-            utterance.onend = () => setVoiceState("idle");
-            utterance.onerror = () => setVoiceState("idle");
-            window.speechSynthesis.speak(utterance);
-            pendingNarratorAutoplayRef.current = false;
-            removeNarratorRetryListeners();
-            return;
-          }
           throw new Error("No narrator audio available");
         }
 
@@ -647,23 +649,6 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
       }
     };
     void run();
-  };
-
-  const speakReply = (reply) => {
-    if (!("speechSynthesis" in window)) {
-      setVoiceState("idle");
-      return;
-    }
-
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(reply);
-    utterance.rate = 0.9;
-    utterance.pitch = 0.82;
-    utterance.volume = 0.9;
-    utterance.onstart = () => setVoiceState("speaking");
-    utterance.onend = () => { setVoiceState("idle"); setVoiceSessionActive(false); };
-    utterance.onerror = () => { setVoiceState("idle"); setVoiceSessionActive(false); };
-    window.speechSynthesis.speak(utterance);
   };
 
   const triggerNarrator = async () => {
@@ -743,25 +728,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
 
     void (async () => {
       try {
-        const generated = await generateProfileQaAnswer(question);
-        const reply = generated?.text || answerQuestion(athlete, question);
-        await streamText(reply, (token) => {
-          setMessages(p => p.map((m, i) =>
-            i === assistantIndex
-              ? { ...m, content: `${m.content || ""}${token}`, streaming: true }
-              : m
-          ));
-        });
-        setMessages(p => p.map((m, i) =>
-          i === assistantIndex ? { ...m, streaming: false } : m
-        ));
-        setLoading(false);
-        const audioBase64 = await synthesizeAthleteVoice(reply, "Character");
-        if (audioBase64) {
-          playAudioBase64(audioBase64);
-        } else {
-          speakReply(reply);
-        }
+        await playNonStreamingQaAnswer(question, assistantIndex);
       } catch {
         setMessages(p => p.map((m, i) =>
           i === assistantIndex
@@ -784,7 +751,6 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     if (loading || voiceState === "listening" || voiceState === "thinking") return;
 
     if (voiceState === "speaking") {
-      window.speechSynthesis?.cancel();
       audioRef.current?.pause?.();
       setVoiceState("idle");
       setVoiceSessionActive(false);
