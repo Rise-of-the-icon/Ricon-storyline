@@ -161,6 +161,9 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   const inputRef = useRef(null);
   const bottomRef = useRef(null);
   const modeRef = useRef(null);
+  const pendingNarratorAutoplayRef = useRef(false);
+  const pendingNarratorBeatRef = useRef(0);
+  const narratorRetryHandlerRef = useRef(null);
   const modalRef = useRef(null);
   const closeButtonRef = useRef(null);
   const previousActiveElement = useRef(null);
@@ -333,6 +336,14 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     if (responseTimerRef.current) { clearTimeout(responseTimerRef.current); responseTimerRef.current = null; }
   };
 
+  const removeNarratorRetryListeners = () => {
+    const handler = narratorRetryHandlerRef.current;
+    if (!handler) return;
+    window.removeEventListener("pointerdown", handler, true);
+    window.removeEventListener("keydown", handler, true);
+    narratorRetryHandlerRef.current = null;
+  };
+
   const hardStopMedia = () => {
     if (voiceTimer.current) window.clearTimeout(voiceTimer.current);
     if (recognitionRef.current) {
@@ -348,6 +359,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     }
     stopStreamingAudio();
     closeRealtimeWS();
+    removeNarratorRetryListeners();
   };
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
@@ -418,7 +430,24 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
           setVoiceState("idle");
         };
         audio.currentTime = 0;
-        audio.play().catch(() => setVoiceState("idle"));
+        audio.play().then(() => {
+          pendingNarratorAutoplayRef.current = false;
+          removeNarratorRetryListeners();
+        }).catch(() => {
+          setVoiceState("idle");
+          pendingNarratorAutoplayRef.current = true;
+          pendingNarratorBeatRef.current = beatIndex;
+          if (!narratorRetryHandlerRef.current) {
+            narratorRetryHandlerRef.current = () => {
+              const beatToRetry = pendingNarratorBeatRef.current;
+              removeNarratorRetryListeners();
+              pendingNarratorAutoplayRef.current = false;
+              window.setTimeout(() => playNarratorAudio(beatToRetry), 0);
+            };
+            window.addEventListener("pointerdown", narratorRetryHandlerRef.current, true);
+            window.addEventListener("keydown", narratorRetryHandlerRef.current, true);
+          }
+        });
       }, 50);
     } catch {
       setVoiceState("idle");
@@ -448,7 +477,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
       narratorIndex.current = 0;
       setActiveBeat(0);
       setMessages([{ ...prewarmedNarrative, prewarmed: true }]);
-      playNarratorAudio(0);
+      pendingNarratorBeatRef.current = 0;
+      pendingNarratorAutoplayRef.current = true;
       return;
     }
 
@@ -459,7 +489,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     const firstBeat = buildNarratorMessage(athlete, 0);
     setMessages([firstBeat]);
     setLoading(false);
-    playNarratorAudio(0);
+    pendingNarratorBeatRef.current = 0;
+    pendingNarratorAutoplayRef.current = true;
   };
 
   const continueNarrator = async () => {
@@ -616,6 +647,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   const switchMode = (m) => {
     if (m === modeRef.current) return;
     hardStopMedia();
+    pendingNarratorAutoplayRef.current = false;
     modeRef.current = m;
     setMessages([]);
     setVoiceState("idle");
@@ -652,6 +684,15 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
       openRealtimeWS();
     }
   }, []);
+
+  useEffect(() => {
+    if (mode !== "narrator" || messages.length === 0 || !pendingNarratorAutoplayRef.current) return;
+    pendingNarratorAutoplayRef.current = false;
+    const timer = window.setTimeout(() => {
+      playNarratorAudio(pendingNarratorBeatRef.current);
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [mode, messages.length]);
 
   const voiceIsActive = voiceSessionActive || voiceState === "listening" || voiceState === "thinking" || voiceState === "speaking";
 
