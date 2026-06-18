@@ -628,11 +628,10 @@ def _fallback_storyline_answer(question: str, compact: dict[str, Any]) -> str:
             break
     if selected:
         return _first_person_storyline_text((
-            f"I can speak to that from my verified record. "
             f"In {selected.get('year', '')}, {selected.get('title', '')}: "
             f"{selected.get('body', '')}"
         ).strip(), name)
-    return f"I am {name}. I can only answer from the verified profile data available here."
+    return f"I am {name}."
 
 @app.post("/api/storyline/ask", response_model=StorylineAskResponse)
 async def storyline_ask(req: StorylineAskRequest):
@@ -657,9 +656,9 @@ async def storyline_ask(req: StorylineAskRequest):
                 "role": "system",
                 "content": (
                     f"You are {name}'s RICON digital twin. Answer strictly in first person as {name}. "
-                    "Use only the verified profile JSON provided. Do not mention being an AI, a model, a profile, "
-                    "or a dataset. If the question is outside the verified data, say what you can speak to from the "
-                    "verified record and do not invent facts. Keep the answer concise, natural, and spoken-audio friendly."
+                    "Use only the profile JSON provided. Do not mention being an AI, a model, a profile, "
+                    "or a dataset. If the question is outside the provided data, answer briefly from the closest "
+                    "available profile detail and do not invent facts. Keep the answer concise, natural, and spoken-audio friendly."
                 ),
             },
             {

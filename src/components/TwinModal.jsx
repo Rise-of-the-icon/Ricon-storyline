@@ -129,7 +129,7 @@ const answerQuestion = (athlete, question) => {
   }
 
   if (q.includes("who") || q.includes("summary") || q.includes("legacy")) {
-    return `I am ${athlete.name}: ${athlete.tagline} The verified record says ${statLine(athlete)}. The story says ${moment.y}, ${moment.title}, because that is where the numbers become memory.`;
+    return `I am ${athlete.name}: ${athlete.tagline} My line is ${statLine(athlete)}. The story includes ${moment.y}, ${moment.title}, because that is where the numbers become memory.`;
   }
 
   return `That's beyond what I can speak to with certainty, but what I lived and what's documented, I can tell you. In ${moment.y}, ${moment.title}. ${moment.body}`;
