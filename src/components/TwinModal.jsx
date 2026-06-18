@@ -140,6 +140,9 @@ const voicePrompts = [
 
 function narratorVoiceIdForAthlete(athlete) {
   const key = clean(athlete?.name || "").replace(/\s+/g, " ").trim();
+  if (key.includes("walt liquor")) return NARRATOR_VOICE_ID_BY_MERGE_KEY["walt liquor"];
+  if (key.includes("david west")) return NARRATOR_VOICE_ID_BY_MERGE_KEY["david west"];
+  if (key.includes("tom hoover")) return NARRATOR_VOICE_ID_BY_MERGE_KEY["tom hoover"];
   return (
     NARRATOR_VOICE_ID_BY_MERGE_KEY[key] ||
     import.meta.env.VITE_WALT_VOICE_ID ||
@@ -170,6 +173,12 @@ function writeNarratorCache(cache) {
   } catch {
     // best-effort cache only
   }
+}
+
+function base64ToAudioUrl(audioBase64) {
+  const bytes = Uint8Array.from(atob(audioBase64), (ch) => ch.charCodeAt(0));
+  const blob = new Blob([bytes], { type: "audio/mp3" });
+  return URL.createObjectURL(blob);
 }
 
 export const OPENING_NARRATIVE_PROMPT = "Begin the story of your career from the beginning, in one paragraph.";
@@ -488,24 +497,46 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
         }
 
         if (!audioBase64) {
-          const response = await fetch(
-            `${API_BASE.replace(/\/$/, "")}/api/research/voice/speak`,
-            {
+          try {
+            const response = await fetch(
+              `${API_BASE.replace(/\/$/, "")}/api/research/voice/speak`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  text,
+                  emotion_family: "Character",
+                  voice_id: voiceId,
+                  model_id: NARRATOR_MODEL_ID,
+                }),
+              },
+            );
+            if (response.ok) {
+              const payload = await response.json();
+              audioBase64 = payload.audio_base64;
+            }
+          } catch {
+            // fall through to backup synthesis routes
+          }
+        }
+
+        if (!audioBase64) {
+          try {
+            const fallbackResponse = await fetch(`${API_BASE.replace(/\/$/, "")}/twin/speak`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                text,
-                emotion_family: "Character",
-                voice_id: voiceId,
-                model_id: NARRATOR_MODEL_ID,
-              }),
-            },
-          );
-          if (!response.ok) {
-            throw new Error(`Narrator synthesis failed (${response.status})`);
+              body: JSON.stringify({ text }),
+            });
+            if (fallbackResponse.ok) {
+              const payload = await fallbackResponse.json();
+              audioBase64 = payload.audio_base64;
+            }
+          } catch {
+            // final fallback is browser speech synthesis
           }
-          const payload = await response.json();
-          audioBase64 = payload.audio_base64;
+        }
+
+        if (audioBase64) {
           cache[cacheKey] = {
             audioBase64,
             generatedAtISO: new Date().toISOString(),
@@ -516,9 +547,25 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
           writeNarratorCache(cache);
         }
 
-        const bytes = Uint8Array.from(atob(audioBase64), (ch) => ch.charCodeAt(0));
-        const blob = new Blob([bytes], { type: "audio/mp3" });
-        const src = URL.createObjectURL(blob);
+        if (!audioBase64) {
+          if ("speechSynthesis" in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.9;
+            utterance.pitch = 0.82;
+            utterance.volume = 0.9;
+            utterance.onstart = () => setVoiceState("speaking");
+            utterance.onend = () => setVoiceState("idle");
+            utterance.onerror = () => setVoiceState("idle");
+            window.speechSynthesis.speak(utterance);
+            pendingNarratorAutoplayRef.current = false;
+            removeNarratorRetryListeners();
+            return;
+          }
+          throw new Error("No narrator audio available");
+        }
+
+        const src = base64ToAudioUrl(audioBase64);
         const audio = new Audio(src);
         audioRef.current = audio;
         audio.onplay = () => setVoiceState("speaking");

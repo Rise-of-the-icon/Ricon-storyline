@@ -9,11 +9,14 @@ function stripDiacritics(value = "") {
 }
 
 export function buildLegendMergeKey(name = "") {
-  const cleaned = normalizeWhitespace(stripDiacritics(name).toLowerCase())
+  let cleaned = normalizeWhitespace(stripDiacritics(name).toLowerCase())
     .replace(/[^a-z0-9\s]/g, "")
     .replace(/\b(jr|sr|ii|iii|iv)\b/g, "")
     .replace(/\s+/g, " ")
     .trim();
+  if (cleaned.includes("walt liquor")) return "walt liquor";
+  if (cleaned.includes("david west")) return "david west";
+  if (cleaned.includes("tom hoover")) return "tom hoover";
   return cleaned;
 }
 
@@ -219,9 +222,7 @@ export async function fetchRemoteLegends() {
     const twins = await res.json();
     const remoteLegends = twins
       .filter(isPublishableTwin)
-      .map(t =>
-        transformTwinToLegend(t, { cat: "sports", league: "nba", leagueLabel: "NBA" })
-      );
+      .map((t) => transformTwinToLegend(t));
     return dedupeLegendsByPerson(remoteLegends);
   } catch (err) {
     console.warn("[remoteTwins] Fetch failed, using local data only:", err);
