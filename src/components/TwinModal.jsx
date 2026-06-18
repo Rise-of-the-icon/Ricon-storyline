@@ -86,19 +86,6 @@ const narratorBeats = [
   },
 ];
 
-function firstPersonLine(text, athleteName) {
-  return String(text || "")
-    .replace(/\bhe was\b/gi, "I was")
-    .replace(/\bshe was\b/gi, "I was")
-    .replace(/\bhe is\b/gi, "I am")
-    .replace(/\bshe is\b/gi, "I am")
-    .replace(/\bhis\b/gi, "my")
-    .replace(/\bher\b/gi, "my")
-    .replace(/\bhim\b/gi, "me")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 const buildNarratorMessage = (athlete, beatIndex) => {
   const beat = narratorBeats[beatIndex % narratorBeats.length];
   const moment = beat.getMoment(athlete);
@@ -722,22 +709,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     setMessages(p => [...p, { role: "assistant", content: "", streaming: true, audioOnly: true }]);
 
     void (async () => {
-      let reply = "";
+      const reply = answerQuestion(athlete, question);
       try {
-        const response = await fetch(`${API_BASE.replace(/\/$/, "")}/api/storyline/ask`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            question,
-            profile: athlete,
-          }),
-        });
-        if (response.ok) {
-          const payload = await response.json();
-          reply = payload.text || "";
-        }
-        if (!reply) reply = answerQuestion(athlete, question);
-        reply = firstPersonLine(reply, athlete.name);
         setMessages(p => p.map((m, i) =>
           i === assistantIndex ? { ...m, content: "", streaming: false, audioOnly: true } : m
         ));
