@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { FEATURED_HERO, FEATURED_PICKS, FILTERS, LEGENDS } from "../data/athletes";
-import { fetchRemoteLegends } from "../data/remoteTwins";
+import { buildLegendMergeKey, fetchRemoteLegends } from "../data/remoteTwins";
 import AthleteCard from "./AthleteCard";
 
 function FeaturedStoryCard({ legend, delay, onClick }) {
@@ -49,9 +49,9 @@ export default function HomeScreen({ onSelect }) {
   useEffect(() => {
     fetchRemoteLegends().then((remote) => {
       if (remote.length === 0) return;
-      const remoteByName = new Map(remote.map((r) => [r.name.toLowerCase(), r]));
+      const remoteByKey = new Map(remote.map((r) => [buildLegendMergeKey(r.name), r]));
       const merged = LEGENDS.map((l) => {
-        const r = remoteByName.get(l.name.toLowerCase());
+        const r = remoteByKey.get(buildLegendMergeKey(l.name));
         if (!r) return l;
         return {
           ...l,
@@ -89,8 +89,8 @@ export default function HomeScreen({ onSelect }) {
           years: l.years,
         };
       });
-      const localNames = new Set(LEGENDS.map((l) => l.name.toLowerCase()));
-      const newOnes = remote.filter((r) => !localNames.has(r.name.toLowerCase()));
+      const localKeys = new Set(LEGENDS.map((l) => buildLegendMergeKey(l.name)));
+      const newOnes = remote.filter((r) => !localKeys.has(buildLegendMergeKey(r.name)));
       setAllLegends([...merged, ...newOnes]);
     });
   }, []);

@@ -1,5 +1,22 @@
 const RAILWAY_URL = "https://ricon-storyline-production.up.railway.app";
 
+function normalizeWhitespace(value = "") {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function stripDiacritics(value = "") {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+export function buildLegendMergeKey(name = "") {
+  const cleaned = normalizeWhitespace(stripDiacritics(name).toLowerCase())
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\b(jr|sr|ii|iii|iv)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned;
+}
+
 function inferMomentType(title = "", eventType = "") {
   const t = title.toLowerCase();
   if (/draft(ed)?/.test(t)) return "draft";
@@ -29,6 +46,64 @@ function isPublishableTwin(twin) {
   const publicTimeline = (twin.timeline || []).some(isPublicTimelineEvent);
   const publicMoments = (twin.customMoments || []).some(isPublicCustomMoment);
   return publicTimeline || publicMoments;
+}
+
+function isPlaceholderText(value = "") {
+  return /\b(test|demo|sample|placeholder|unknown|temp)\b/i.test(value);
+}
+
+function normalizeLegendMoments(moments = []) {
+  const seen = new Set();
+  return moments
+    .filter((m) => m?.title)
+    .map((m) => ({
+      ...m,
+      source: m.source || m.src || "Verified archival source",
+      src: m.src || m.source || "Verified archival source",
+    }))
+    .filter((m) => {
+      const key = `${String(m.y || "")}:${String(m.title || "").toLowerCase().trim()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function legendQualityScore(legend) {
+  const momentScore = (legend.moments?.length || 0) * 10;
+  const statScore = (legend.stats?.length || 0) * 2;
+  const bodyScore = (legend.moments || []).reduce((sum, m) => sum + (m.body?.length || 0), 0);
+  const yearsScore = legend.years ? 3 : 0;
+  const imageScore = legend.headshot ? 2 : 0;
+  const taglinePenalty = isPlaceholderText(legend.tagline || "") ? -10 : 0;
+  return momentScore + statScore + bodyScore / 50 + yearsScore + imageScore + taglinePenalty;
+}
+
+function isRenderableLegend(legend) {
+  const key = buildLegendMergeKey(legend.name);
+  if (!key || key === "unknown") return false;
+  if (isPlaceholderText(legend.name || "")) return false;
+  if (!legend.moments || legend.moments.length === 0) return false;
+  return true;
+}
+
+function dedupeLegendsByPerson(legends) {
+  const byKey = new Map();
+  legends.forEach((legend) => {
+    const key = buildLegendMergeKey(legend.name);
+    if (!key) return;
+    const next = {
+      ...legend,
+      _mergeKey: key,
+      moments: normalizeLegendMoments(legend.moments),
+    };
+    if (!isRenderableLegend(next)) return;
+    const current = byKey.get(key);
+    if (!current || legendQualityScore(next) > legendQualityScore(current)) {
+      byKey.set(key, next);
+    }
+  });
+  return [...byKey.values()];
 }
 
 export function transformTwinToLegend(twin, options = {}) {
@@ -71,6 +146,8 @@ export function transformTwinToLegend(twin, options = {}) {
   const allMoments = [...timelineMoments, ...customMapped]
     .sort((a, b) => (parseInt(a.y) || 0) - (parseInt(b.y) || 0));
 
+  const mergeKey = buildLegendMergeKey(name);
+
   const stats = [];
   if (bdl.recent_season?.ppg) stats.push({ l: "PPG", v: String(bdl.recent_season.ppg) });
   if (bdl.recent_season?.rpg) stats.push({ l: "RPG", v: String(bdl.recent_season.rpg) });
@@ -78,7 +155,7 @@ export function transformTwinToLegend(twin, options = {}) {
   if (bdl.height)              stats.push({ l: "Height", v: bdl.height });
 
   return {
-    id:         twin.twinId,
+    id:         twin.twinId || `remote-${mergeKey.replace(/\s+/g, "-")}`,
     name,
     initials,
     headshot:   wiki.imageUrl || "",
@@ -93,6 +170,7 @@ export function transformTwinToLegend(twin, options = {}) {
     league,
     leagueLabel,
     _remote:    true,
+    _mergeKey:  mergeKey,
     // Preserve raw API data for use in HomeScreen merge logic
     _bdl:       twin.bdl_verified_stats  || null,
     _wiki:      twin.wiki_verified_stats || null,
@@ -107,11 +185,12 @@ export async function fetchRemoteLegends() {
       return [];
     }
     const twins = await res.json();
-    return twins
+    const remoteLegends = twins
       .filter(isPublishableTwin)
       .map(t =>
         transformTwinToLegend(t, { cat: "sports", league: "nba", leagueLabel: "NBA" })
       );
+    return dedupeLegendsByPerson(remoteLegends);
   } catch (err) {
     console.warn("[remoteTwins] Fetch failed, using local data only:", err);
     return [];
