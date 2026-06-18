@@ -20,7 +20,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import List
+from typing import Any, List
 from motor.motor_asyncio import AsyncIOMotorClient
 from fastapi import Request
 from datetime import datetime
@@ -359,6 +359,39 @@ def generate_anthropic_text(question: str, system_prompt: str) -> str:
         raise HTTPException(status_code=502, detail="Anthropic generation returned empty text")
     return text
 
+def compact_qa_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    moments = []
+    for moment in (profile.get("moments") or [])[:8]:
+        moments.append({
+            "year": moment.get("y") or moment.get("year") or "",
+            "title": moment.get("title") or "",
+            "body": moment.get("body") or moment.get("description") or moment.get("summary") or "",
+        })
+    return {
+        "name": profile.get("name") or "",
+        "tagline": profile.get("tagline") or "",
+        "years": profile.get("years") or "",
+        "role": profile.get("position") or profile.get("genreLabel") or profile.get("leagueLabel") or "",
+        "teams_or_credits": profile.get("teams") or profile.get("credits") or "",
+        "stats": profile.get("stats") or [],
+        "moments": moments,
+    }
+
+def build_profile_qa_prompt(profile: dict[str, Any]) -> str:
+    compact = compact_qa_profile(profile)
+    name = compact.get("name") or "this person"
+    return f"""
+You are {name}'s RICON digital twin.
+
+Answer strictly in first person as {name}. Sound like a thoughtful person speaking naturally, not a narrator reading a database entry.
+Use the profile details below only as grounding. Do not mention "profile", "database", "verified record", "provided data", or "archive".
+Do not list stats mechanically unless the question asks for stats. For legacy questions, talk about values, choices, work, influence, and what the career meant.
+Keep the answer concise, conversational, and audio-friendly: 2-3 sentences.
+
+Profile grounding:
+{json.dumps(compact, ensure_ascii=False)}
+""".strip()
+
 RESEARCH_EMOTION_STEERING = {
     "Intensity": {
         "instruction": "Speak with contained intensity: focused, forceful, and urgent without shouting.",
@@ -571,11 +604,26 @@ class AskResponse(BaseModel):
     text:         str
     audio_base64: str
 
+class ProfileAskRequest(BaseModel):
+    question: str
+    profile: dict[str, Any]
+
+class ProfileAskResponse(BaseModel):
+    text: str
+
 @app.post("/twin/ask", response_model=AskResponse)
 async def ask(req: AskRequest):
     text = generate_anthropic_text(req.question, DAVID_REALTIME_PROMPT)
     audio = synthesize_audio(text)
     return AskResponse(text=text, audio_base64=base64.b64encode(audio).decode("utf-8"))
+
+@app.post("/api/twin/generate-answer", response_model=ProfileAskResponse)
+async def generate_profile_answer(req: ProfileAskRequest):
+    question = req.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question is required")
+    text = generate_anthropic_text(question, build_profile_qa_prompt(req.profile))
+    return ProfileAskResponse(text=text)
 
 # ── WebSocket Q&A ─────────────────────────────────────────────────────────────
 @app.websocket("/twin/ws")

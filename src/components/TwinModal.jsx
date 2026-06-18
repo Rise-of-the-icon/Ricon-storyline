@@ -54,11 +54,15 @@ const roleContext = (athlete) => athlete.cat === "music"
   ? `${athlete.genreLabel} across ${athlete.years}, with documented works including ${athlete.credits}`
   : `${athlete.position} across ${athlete.years}, with ${athlete.teams}`;
 
-const isDavidWestAthlete = (athlete) => {
+const isStudioAnthropicQaAthlete = (athlete) => {
   const key = clean(`${athlete?.id || ""} ${athlete?.name || ""}`).replace(/\s+/g, " ").trim();
   return athlete?.id === "west_d" ||
     athlete?.id === "2aa2a157-7849-44a7-b695-f715c39d5bd7" ||
-    key.includes("david west");
+    athlete?.id === "c28f8898-da88-4887-b1e9-2d61396a91b9" ||
+    athlete?.id === "walt-liquor-research" ||
+    key.includes("david west") ||
+    key.includes("tom hoover") ||
+    key.includes("walt liquor");
 };
 
 const narratorBeats = [
@@ -121,8 +125,9 @@ const answerQuestion = (athlete, question) => {
     return `One defining chapter is ${moment.y}: ${moment.title}. ${moment.body} That is not mythology in this experience. It is one of the verified moments this twin is allowed to speak from.`;
   }
 
-  if (isDavidWestAthlete(athlete) && q.includes("legacy")) {
-    return "I want people to understand my legacy through the choices I made, not just the numbers. I was an All-Star, I won championships, but the part that mattered was knowing what I valued, taking less when purpose mattered more, and being the kind of teammate who helped winning become real.";
+  if (isStudioAnthropicQaAthlete(athlete) && q.includes("legacy")) {
+    const path = athlete.cat === "music" ? athlete.credits : athlete.teams;
+    return `I want people to understand my legacy through the choices I made and the work I put into ${path || "my career"}. The numbers and dates matter, but they only tell part of it. What I hope lasts is the way I carried myself, what I stood for, and the impact I had on the people who were paying attention.`;
   }
 
   if (q.includes("who") || q.includes("summary") || q.includes("legacy")) {
@@ -325,19 +330,18 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     return payload.audio_base64 || null;
   };
 
-  const generateDavidQaAnswer = async (question) => {
-    if (!isDavidWestAthlete(athlete)) return null;
+  const generateProfileQaAnswer = async (question) => {
+    if (!isStudioAnthropicQaAthlete(athlete)) return null;
     try {
-      const response = await fetch(`${API_BASE.replace(/\/$/, "")}/twin/ask`, {
+      const response = await fetch(`${API_BASE.replace(/\/$/, "")}/api/twin/generate-answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, athlete_id: athlete.id }),
+        body: JSON.stringify({ question, profile: athlete }),
       });
       if (!response.ok) return null;
       const payload = await response.json();
       return {
         text: payload.text || "",
-        audioBase64: payload.audio_base64 || null,
       };
     } catch {
       return null;
@@ -739,7 +743,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
 
     void (async () => {
       try {
-        const generated = await generateDavidQaAnswer(question);
+        const generated = await generateProfileQaAnswer(question);
         const reply = generated?.text || answerQuestion(athlete, question);
         await streamText(reply, (token) => {
           setMessages(p => p.map((m, i) =>
@@ -752,7 +756,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
           i === assistantIndex ? { ...m, streaming: false } : m
         ));
         setLoading(false);
-        const audioBase64 = generated?.audioBase64 || await synthesizeAthleteVoice(reply, "Character");
+        const audioBase64 = await synthesizeAthleteVoice(reply, "Character");
         if (audioBase64) {
           playAudioBase64(audioBase64);
         } else {
