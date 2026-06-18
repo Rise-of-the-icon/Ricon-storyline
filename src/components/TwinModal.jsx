@@ -333,6 +333,23 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     if (responseTimerRef.current) { clearTimeout(responseTimerRef.current); responseTimerRef.current = null; }
   };
 
+  const hardStopMedia = () => {
+    if (voiceTimer.current) window.clearTimeout(voiceTimer.current);
+    if (recognitionRef.current) {
+      recognitionRef.current.onend = null;
+      recognitionRef.current.abort?.();
+    }
+    recognitionRef.current = null;
+    window.speechSynthesis?.cancel();
+    if (audioRef.current) {
+      audioRef.current.pause?.();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    stopStreamingAudio();
+    closeRealtimeWS();
+  };
+
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
@@ -346,6 +363,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
+        hardStopMedia();
         onCloseRef.current();
         return;
       }
@@ -379,10 +397,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
 
   useEffect(() => {
     return () => {
-      if (voiceTimer.current) window.clearTimeout(voiceTimer.current);
-      recognitionRef.current?.abort?.();
-      window.speechSynthesis?.cancel();
-      audioRef.current?.pause?.();
+      hardStopMedia();
     };
   }, []);
 
@@ -433,7 +448,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
       narratorIndex.current = 0;
       setActiveBeat(0);
       setMessages([{ ...prewarmedNarrative, prewarmed: true }]);
-      playNarratorAudio(prewarmedNarrative.content, 0);
+      playNarratorAudio(0);
       return;
     }
 
@@ -592,14 +607,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   };
 
   const stopVoiceInteraction = () => {
-    if (voiceTimer.current) window.clearTimeout(voiceTimer.current);
-    if (recognitionRef.current) {
-      recognitionRef.current.onend = null;
-      recognitionRef.current.abort?.();
-    }
-    recognitionRef.current = null;
-    window.speechSynthesis?.cancel();
-    audioRef.current?.pause?.();
+    hardStopMedia();
     setVoiceState("idle");
     setVoiceSessionActive(false);
     setLoading(false);
@@ -607,15 +615,23 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
 
   const switchMode = (m) => {
     if (m === modeRef.current) return;
+    hardStopMedia();
     modeRef.current = m;
     setMessages([]);
     setVoiceState("idle");
     setVoiceSessionActive(false);
-    window.speechSynthesis?.cancel();
-    audioRef.current?.pause?.();
+    setLoading(false);
     onSwitchMode(m);
     if (m === "narrator") setTimeout(triggerNarrator, 50);
     if (m === "qa") setTimeout(openRealtimeWS, 50);
+  };
+
+  const handleClose = () => {
+    hardStopMedia();
+    setVoiceState("idle");
+    setVoiceSessionActive(false);
+    setLoading(false);
+    onClose();
   };
 
   useEffect(() => {
@@ -667,7 +683,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
             </button>
           ))}
         </div>
-        <button ref={closeButtonRef} type="button" className="close-button" onClick={onClose}>Close <span aria-hidden="true">✕</span></button>
+        <button ref={closeButtonRef} type="button" className="close-button" onClick={handleClose}>Close <span aria-hidden="true">✕</span></button>
       </div>
 
       <div className="modal-layout">
