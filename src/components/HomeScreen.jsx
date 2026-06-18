@@ -49,14 +49,20 @@ export default function HomeScreen({ onSelect }) {
   useEffect(() => {
     fetchRemoteLegends().then((remote) => {
       if (remote.length === 0) return;
+      const targetOrder = ["david west", "tom hoover", "walt liquor"];
       const remoteByKey = new Map(remote.map((r) => [buildLegendMergeKey(r.name), r]));
+      const hasTargetTriplet = targetOrder.every((key) => remoteByKey.has(key));
+      if (hasTargetTriplet) {
+        const ordered = targetOrder.map((key) => remoteByKey.get(key)).filter(Boolean);
+        setAllLegends(ordered);
+        return;
+      }
       const merged = LEGENDS.map((l) => {
         const r = remoteByKey.get(buildLegendMergeKey(l.name));
         if (!r) return l;
         return {
-          ...l,
           ...r,
-          headshot: l.headshot,
+          headshot: r.headshot || l.headshot,
           stats: l.stats.map((s) => {
             const bdl = r._bdl;
             const wiki = r._wiki;
@@ -82,11 +88,6 @@ export default function HomeScreen({ onSelect }) {
             }
             return s;
           }),
-          tagline: l.tagline,
-          voice: l.voice,
-          moments: l.moments,
-          position: l.position,
-          years: l.years,
         };
       });
       const localKeys = new Set(LEGENDS.map((l) => buildLegendMergeKey(l.name)));

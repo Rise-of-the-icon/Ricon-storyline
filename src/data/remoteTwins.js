@@ -25,6 +25,13 @@ function inferLegendCategory(twin) {
   const summary = `${twin?.wikipedia?.summary || ""}`.toLowerCase();
   const description = `${twin?.wikipedia?.description || ""}`.toLowerCase();
   const haystack = `${name} ${summary} ${description}`;
+  if (name.includes("walt liquor")) {
+    return {
+      cat: "music",
+      genre: "music",
+      genreLabel: "Music",
+    };
+  }
   if (
     /music|musician|artist|rapper|singer|producer|executive|song|album|hip[-\s]?hop|r&b|rock|jazz/.test(
       haystack,

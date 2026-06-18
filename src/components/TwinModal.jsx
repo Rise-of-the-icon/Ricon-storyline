@@ -16,6 +16,12 @@ const NARRATOR_VOICE_ID_BY_MERGE_KEY = {
   "walt taylor aka walt liquor": "default--z5zasdfwci5ofrt-gmsjw__walt",
 };
 
+const NARRATOR_VOICE_ID_BY_TWIN_ID = {
+  "2aa2a157-7849-44a7-b695-f715c39d5bd7": "default--z5zasdfwci5ofrt-gmsjw__test",
+  "c28f8898-da88-4887-b1e9-2d61396a91b9": "default--z5zasdfwci5ofrt-gmsjw__tom_hoover",
+  "walt-liquor-research": "default--z5zasdfwci5ofrt-gmsjw__walt",
+};
+
 const clean = (value) => value.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
 const STOP_WORDS = new Set(["what", "when", "where", "your", "were", "with", "that", "this", "from", "about", "moment"]);
 
@@ -139,6 +145,8 @@ const voicePrompts = [
 ];
 
 function narratorVoiceIdForAthlete(athlete) {
+  const byId = NARRATOR_VOICE_ID_BY_TWIN_ID[athlete?.id];
+  if (byId) return byId;
   const key = clean(athlete?.name || "").replace(/\s+/g, " ").trim();
   if (key.includes("walt liquor")) return NARRATOR_VOICE_ID_BY_MERGE_KEY["walt liquor"];
   if (key.includes("david west")) return NARRATOR_VOICE_ID_BY_MERGE_KEY["david west"];

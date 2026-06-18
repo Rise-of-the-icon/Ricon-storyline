@@ -112,6 +112,7 @@ export default function RICONStoryline() {
         </div>
         {twinOpen && athlete && (
           <TwinModal
+            key={athlete.id}
             athlete={athlete}
             mode={twinMode}
             prewarmedNarrative={twinMode === "narrator" ? prewarmedNarrative : null}
