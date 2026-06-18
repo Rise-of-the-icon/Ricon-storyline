@@ -54,6 +54,13 @@ const roleContext = (athlete) => athlete.cat === "music"
   ? `${athlete.genreLabel} across ${athlete.years}, with documented works including ${athlete.credits}`
   : `${athlete.position} across ${athlete.years}, with ${athlete.teams}`;
 
+const isDavidWestAthlete = (athlete) => {
+  const key = clean(`${athlete?.id || ""} ${athlete?.name || ""}`).replace(/\s+/g, " ").trim();
+  return athlete?.id === "west_d" ||
+    athlete?.id === "2aa2a157-7849-44a7-b695-f715c39d5bd7" ||
+    key.includes("david west");
+};
+
 const narratorBeats = [
   {
     media: [{ title: "Draft Night Archive", meta: "1984 · Source footage placeholder" }],
@@ -112,6 +119,10 @@ const answerQuestion = (athlete, question) => {
 
   if (q.includes("best") || q.includes("biggest") || q.includes("defining") || q.includes("moment")) {
     return `One defining chapter is ${moment.y}: ${moment.title}. ${moment.body} That is not mythology in this experience. It is one of the verified moments this twin is allowed to speak from.`;
+  }
+
+  if (isDavidWestAthlete(athlete) && q.includes("legacy")) {
+    return "I want people to understand my legacy through the choices I made, not just the numbers. I was an All-Star, I won championships, but the part that mattered was knowing what I valued, taking less when purpose mattered more, and being the kind of teammate who helped winning become real.";
   }
 
   if (q.includes("who") || q.includes("summary") || q.includes("legacy")) {
@@ -312,6 +323,25 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     if (!response.ok) return null;
     const payload = await response.json();
     return payload.audio_base64 || null;
+  };
+
+  const generateDavidQaAnswer = async (question) => {
+    if (!isDavidWestAthlete(athlete)) return null;
+    try {
+      const response = await fetch(`${API_BASE.replace(/\/$/, "")}/twin/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, athlete_id: athlete.id }),
+      });
+      if (!response.ok) return null;
+      const payload = await response.json();
+      return {
+        text: payload.text || "",
+        audioBase64: payload.audio_base64 || null,
+      };
+    } catch {
+      return null;
+    }
   };
 
   const finalizeCurrent = (isError = false) => {
@@ -708,8 +738,9 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     setMessages(p => [...p, { role: "assistant", content: "", streaming: true }]);
 
     void (async () => {
-      const reply = answerQuestion(athlete, question);
       try {
+        const generated = await generateDavidQaAnswer(question);
+        const reply = generated?.text || answerQuestion(athlete, question);
         await streamText(reply, (token) => {
           setMessages(p => p.map((m, i) =>
             i === assistantIndex
@@ -721,7 +752,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
           i === assistantIndex ? { ...m, streaming: false } : m
         ));
         setLoading(false);
-        const audioBase64 = await synthesizeAthleteVoice(reply, "Character");
+        const audioBase64 = generated?.audioBase64 || await synthesizeAthleteVoice(reply, "Character");
         if (audioBase64) {
           playAudioBase64(audioBase64);
         } else {
