@@ -1,27 +1,6 @@
 import TimelineMoment from "./TimelineMoment";
 
-function bannerCopy(access, firstName) {
-  if (access.canAccessChat) {
-    return {
-      title: "YOUR DIGITAL TWIN IS ACTIVE",
-      body: `Interact with ${firstName}'s verified AI twin. Choose Narrator mode to relive the story, or Q&A mode to ask anything directly.`,
-    };
-  }
-
-  if (access.reason === "guest") {
-    return {
-      title: "DIGITAL TWIN · MEMBERS ONLY",
-      body: `Create a fan account to unlock interactive chat with ${firstName}. The verified timeline below remains free to explore.`,
-    };
-  }
-
-  return {
-    title: "DIGITAL TWIN AVAILABLE",
-    body: `Subscribe to activate ${firstName}'s verified AI twin. Public story content stays open — chat and subscriber experiences require a plan.`,
-  };
-}
-
-export default function AthleteScreen({ athlete, onBack, onTwin, twinAccess }) {
+export default function AthleteScreen({ athlete, onBack, onTwin }) {
   const isMusic = athlete.cat === "music";
   const categoryLabel = isMusic ? athlete.genreLabel : athlete.leagueLabel;
   const metaLabel = isMusic
@@ -29,16 +8,9 @@ export default function AthleteScreen({ athlete, onBack, onTwin, twinAccess }) {
     : `${athlete.position} · ${athlete.teams}`;
   const timelineLabel = isMusic ? "ARTISTIC TIMELINE" : "CAREER TIMELINE";
   const firstName = athlete.name.split(" ")[0].replace(/^The$/, athlete.name.split(" ")[1] || "legend");
-  const access = twinAccess ?? { canAccessChat: true, reason: "granted" };
-  const banner = bannerCopy(access, firstName);
-  const activateLabel = access.canAccessChat
-    ? "ACTIVATE DIGITAL TWIN"
-    : access.reason === "guest"
-      ? "CREATE ACCOUNT"
-      : "ACTIVATE DIGITAL TWIN";
 
   return (
-    <div className="animate-page-enter">
+    <div>
       <nav className="app-nav sticky" aria-label={`${athlete.name} story`}>
         <button type="button" className="ghost-button" onClick={onBack}>
           <span aria-hidden="true">← </span>BROWSE
@@ -47,13 +19,8 @@ export default function AthleteScreen({ athlete, onBack, onTwin, twinAccess }) {
         <span className="brand-submark">RICON Storyline</span>
         {categoryLabel && <span className="nav-context">{categoryLabel}</span>}
         <div className="nav-spacer" />
-        <button
-          type="button"
-          className="primary-button premium-button cta-glow"
-          onClick={() => onTwin("narrator")}
-        >
-          <span aria-hidden="true">◉ </span>
-          {activateLabel}
+        <button type="button" className="primary-button premium-button cta-glow" onClick={() => onTwin("narrator")}>
+          <span aria-hidden="true">◉ </span>Ask {firstName} a Question
         </button>
       </nav>
 
@@ -73,6 +40,15 @@ export default function AthleteScreen({ athlete, onBack, onTwin, twinAccess }) {
         <h1 className="athlete-name">
           {athlete.name}
         </h1>
+        <div className="profile-trust-badge">
+          <div className="profile-trust-title">
+            <span aria-hidden="true">✓</span>
+            Verified by RICON
+          </div>
+          <div className="profile-trust-copy">
+            Built from cited archival sources and editorial review
+          </div>
+        </div>
         <div className="athlete-tagline">
           "{athlete.tagline}"
         </div>
@@ -87,22 +63,16 @@ export default function AthleteScreen({ athlete, onBack, onTwin, twinAccess }) {
         </div>
       </div>
 
-      <div className={access.canAccessChat ? "twin-banner" : "twin-banner twin-banner-locked"}>
+      <div className="twin-banner">
         <div>
-          <div className="twin-banner-title">{banner.title}</div>
+          <div className="twin-banner-title">DIGITAL TWIN AVAILABLE</div>
           <div className="twin-banner-copy">
-            {banner.body}
+            Interact with {firstName}'s verified AI twin. Choose Narrator mode to relive the story, or Q&A mode to ask anything directly.
           </div>
         </div>
         <div className="button-row">
-          <button type="button" className="primary-button" onClick={() => onTwin("narrator")}>
-            <span aria-hidden="true">{access.canAccessChat ? "▶" : "◉"} </span>
-            {access.canAccessChat ? "NARRATOR" : activateLabel}
-          </button>
-          <button type="button" className="secondary-button" onClick={() => onTwin("qa")}>
-            <span aria-hidden="true">✦ </span>
-            {access.canAccessChat ? "ASK ME ANYTHING" : "UNLOCK Q&A"}
-          </button>
+          <button type="button" className="primary-button" onClick={() => onTwin("narrator")}><span aria-hidden="true">▶ </span>NARRATOR</button>
+          <button type="button" className="secondary-button" onClick={() => onTwin("qa")}><span aria-hidden="true">✦ </span>Ask {firstName} a Question</button>
         </div>
       </div>
 
@@ -117,10 +87,9 @@ export default function AthleteScreen({ athlete, onBack, onTwin, twinAccess }) {
       </section>
 
       <div className="closing-cta">
-        <div className="closing-copy">The story doesn&apos;t end here.</div>
+        <div className="closing-copy">The story doesn't end here.</div>
         <button type="button" className="secondary-button" onClick={() => onTwin("qa")}>
-          {access.canAccessChat ? "ASK THE DIGITAL TWIN" : "UNLOCK THE DIGITAL TWIN"}{" "}
-          <span aria-hidden="true">→</span>
+          Ask {firstName} a Question <span aria-hidden="true">→</span>
         </button>
       </div>
       </main>

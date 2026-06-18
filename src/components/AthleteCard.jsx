@@ -30,9 +30,7 @@ export default function AthleteCard({ athlete, delay, onClick }) {
       <div className="card-tagline">
         {athlete.tagline}
       </div>
-      <div className="card-explore">
-        EXPLORE STORY <span style={{ fontSize: 13 }} aria-hidden="true">→</span>
-      </div>
+      <div className="card-explore">Explore Legacy →</div>
     </button>
   );
 }
