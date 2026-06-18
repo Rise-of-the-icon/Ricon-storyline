@@ -89,10 +89,9 @@ const narratorBeats = [
 const buildNarratorMessage = (athlete, beatIndex) => {
   const beat = narratorBeats[beatIndex % narratorBeats.length];
   const moment = beat.getMoment(athlete);
-  const line = beat.line(athlete);
   return {
     role: "assistant",
-    content: line,
+    content: beat.line(athlete),
     moment,
     media: beat.media,
   };
@@ -116,7 +115,7 @@ const answerQuestion = (athlete, question) => {
   }
 
   if (q.includes("who") || q.includes("summary") || q.includes("legacy")) {
-    return `I am ${athlete.name}: ${athlete.tagline} My line is ${statLine(athlete)}. The story includes ${moment.y}, ${moment.title}, because that is where the numbers become memory.`;
+    return `I am ${athlete.name}: ${athlete.tagline} The verified record says ${statLine(athlete)}. The story says ${moment.y}, ${moment.title}, because that is where the numbers become memory.`;
   }
 
   return `That's beyond what I can speak to with certainty, but what I lived and what's documented, I can tell you. In ${moment.y}, ${moment.title}. ${moment.body}`;
@@ -706,13 +705,20 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
 
     const assistantIndex = messages.length + 1;
     currentMsgRef.current = { index: null, buffer: "", audioStarted: false, question: null };
-    setMessages(p => [...p, { role: "assistant", content: "", streaming: true, audioOnly: true }]);
+    setMessages(p => [...p, { role: "assistant", content: "", streaming: true }]);
 
     void (async () => {
       const reply = answerQuestion(athlete, question);
       try {
+        await streamText(reply, (token) => {
+          setMessages(p => p.map((m, i) =>
+            i === assistantIndex
+              ? { ...m, content: `${m.content || ""}${token}`, streaming: true }
+              : m
+          ));
+        });
         setMessages(p => p.map((m, i) =>
-          i === assistantIndex ? { ...m, content: "", streaming: false, audioOnly: true } : m
+          i === assistantIndex ? { ...m, streaming: false } : m
         ));
         setLoading(false);
         const audioBase64 = await synthesizeAthleteVoice(reply, "Character");
@@ -927,6 +933,14 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
                   <div className="qa-empty-state">
                     <div className="empty-title">Ask from the verified archive</div>
                     <div className="empty-meta">Every response draws from documented moments, cited sources, and verified records.</div>
+                    <div className="voice-prompts compact">
+                      {voicePrompts.map(prompt => (
+                        <button key={prompt.label} type="button" className="voice-chip" onClick={() => sendSuggestedPrompt(prompt.prompt)}>
+                          <span aria-hidden="true">{prompt.icon}</span>
+                          {prompt.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 ) : (
                   <div className="empty-state">
@@ -944,19 +958,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
                 </div>
               )}
 
-              {mode === "qa" && (
-                <div className="voice-prompts compact">
-                  {voicePrompts.map(prompt => (
-                    <button key={prompt.label} type="button" className="voice-chip" onClick={() => sendSuggestedPrompt(prompt.prompt)}>
-                      <span aria-hidden="true">{prompt.icon}</span>
-                      {prompt.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
             {messages.map((msg, i) => {
-              if (mode === "qa") return null;
+              const hideQaAnswerText = mode === "qa" && msg.role === "assistant" && !msg.error;
               return (
               <div key={i} className={`${mode === "narrator" ? "message narrator-beat" : "message"}${msg.prewarmed ? " prewarm-fade" : ""}`}>
                 {msg.role === "user" ? (
@@ -980,8 +983,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
                         </button>
                       )}
                       <div className={msg.error ? "assistant-text stream-error" : "assistant-text"}>
-                        {msg.content}
-                        {msg.streaming && <span className="stream-cursor" aria-hidden="true">|</span>}
+                        {!hideQaAnswerText && msg.content}
+                        {!hideQaAnswerText && msg.streaming && <span className="stream-cursor" aria-hidden="true">|</span>}
                       </div>
                       {!msg.error && <div className="verified-meta"><span aria-hidden="true">✓ </span>Verified twin response</div>}
                       {mode === "narrator" && msg.media?.length > 0 && (
