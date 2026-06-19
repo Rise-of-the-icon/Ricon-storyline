@@ -5,7 +5,7 @@ const WS_BASE  = (import.meta.env.VITE_TWIN_API_URL || "https://ricon-storyline-
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const STREAM_ERROR_MESSAGE = "This moment is unavailable from the verified archive. Try a different question.";
-const NARRATOR_VOICE_CACHE_KEY = "ricon:narrator-voice-cache:v3";
+const NARRATOR_VOICE_CACHE_KEY = "ricon:narrator-voice-cache:v4";
 const NARRATOR_MODEL_ID = "inworld-tts-2";
 
 const NARRATOR_VOICE_ID_BY_MERGE_KEY = {
@@ -53,6 +53,53 @@ const roleContext = (athlete) => athlete.cat === "music"
   ? `${athlete.genreLabel} across ${athlete.years}, with documented works including ${athlete.credits}`
   : `${athlete.position} across ${athlete.years}, with ${athlete.teams}`;
 
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const narratorMomentBody = (athlete, moment) => {
+  const fullName = athlete?.name || "";
+  const aliases = new Set([fullName]);
+  if (fullName.includes("(")) {
+    aliases.add(fullName.replace(/\s*\([^)]*\)/g, "").trim());
+    const aka = fullName.match(/\((?:aka\s+)?([^)]*)\)/i)?.[1]?.trim();
+    if (aka) aliases.add(aka);
+  }
+
+  let text = moment?.body || "";
+  aliases.forEach(alias => {
+    if (!alias) return;
+    text = text
+      .replace(new RegExp(`${escapeRegExp(alias)}'s`, "gi"), "my")
+      .replace(new RegExp(`\\b${escapeRegExp(alias)}\\b\\s+was\\s+given\\b`, "gi"), "I was given")
+      .replace(new RegExp(`\\b${escapeRegExp(alias)}\\b\\s+was\\s+named\\b`, "gi"), "I was named")
+      .replace(new RegExp(`\\b${escapeRegExp(alias)}\\b\\s+was\\s+selected\\b`, "gi"), "I was selected")
+      .replace(new RegExp(`\\b${escapeRegExp(alias)}\\b\\s+attends\\b`, "gi"), "I attended")
+      .replace(new RegExp(`\\b${escapeRegExp(alias)}\\b\\s+plays\\b`, "gi"), "I played")
+      .replace(new RegExp(`\\b${escapeRegExp(alias)}\\b\\s+enters\\b`, "gi"), "I entered")
+      .replace(new RegExp(`\\b${escapeRegExp(alias)}\\b\\s+wins\\b`, "gi"), "I won")
+      .replace(new RegExp(`\\b${escapeRegExp(alias)}\\b\\s+becomes\\b`, "gi"), "I became")
+      .replace(new RegExp(`\\b${escapeRegExp(alias)}\\b\\s+\\w+`, "gi"), match => {
+        const verb = match.split(/\s+/).pop();
+        return verb ? `I ${verb}` : "I";
+      })
+      .replace(new RegExp(`\\b${escapeRegExp(alias)}\\b`, "gi"), "I");
+  });
+
+  return text
+    .replace(/\bI,\s+.*?\bplays\b/gi, "I played")
+    .replace(/\bI,\s+.*?\battends\b/gi, "I attended")
+    .replace(/\bI,\s+.*?\bwins\b/gi, "I won")
+    .replace(/\bgive\s+Walt\s+room\b/gi, "give me room")
+    .replace(/\bHe\b/g, "I")
+    .replace(/\bhe\b/g, "I")
+    .replace(/\bHis\b/g, "My")
+    .replace(/\bhis\b/g, "my")
+    .replace(/\bHim\b/g, "Me")
+    .replace(/\bhim\b/g, "me")
+    .replace(/\bI was given my first opportunity\b/g, "I got my first opportunity")
+    .replace(/\bI was named\b/g, "I was named")
+    .trim();
+};
+
 const isStudioAnthropicQaAthlete = (athlete) => {
   const key = clean(`${athlete?.id || ""} ${athlete?.name || ""}`).replace(/\s+/g, " ").trim();
   return athlete?.id === "west_d" ||
@@ -71,7 +118,7 @@ const narratorBeats = [
     line: (athlete) => {
       const first = athlete.moments[0];
       const signature = athlete.moments.find(m => m.type === "championship" || m.type === "record") || athlete.moments[1] || first;
-      return `I am ${athlete.name}. ${athlete.years} was the arc, but ${first.y} is where my story first broke through. ${first.body} From there, I kept building evidence through the work itself. ${signature.y}: ${signature.title}. I still point to that moment because it carries the weight of what I was trying to do.`;
+      return `I am ${athlete.name}. ${athlete.years} was the arc, but ${first.y} is where my story first broke through. ${narratorMomentBody(athlete, first)} From there, I kept building evidence through the work itself. ${signature.y}: ${signature.title}. I still point to that moment because it carries the weight of what I was trying to do.`;
     },
   },
   {
@@ -91,7 +138,7 @@ const narratorBeats = [
     getMoment: (athlete) => athlete.moments[athlete.moments.length - 1],
     line: (athlete) => {
       const final = athlete.moments[athlete.moments.length - 1];
-      return `Legacy is what remains after the numbers stop moving. My line reads like this: ${statLine(athlete)}. But those facts only matter because I lived the moments behind them. ${final.y}: ${final.title}. ${final.body} That is the part I want people to hear when they listen back.`;
+      return `Legacy is what remains after the numbers stop moving. My line reads like this: ${statLine(athlete)}. But those facts only matter because I lived the moments behind them. ${final.y}: ${final.title}. ${narratorMomentBody(athlete, final)} That is the part I want people to hear when they listen back.`;
     },
   },
 ];
