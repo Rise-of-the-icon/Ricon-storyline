@@ -382,8 +382,16 @@ function base64ToAudioUrl(audioBase64) {
 
 export const OPENING_NARRATIVE_PROMPT = "Begin the story of your career from the beginning, in one paragraph.";
 
+const buildNarratorMessages = (athlete) =>
+  narratorBeats.map((_, index) => buildNarratorMessage(athlete, index));
+
+const buildOpeningNarratorMessages = (athlete, prewarmedNarrative = null) => {
+  const firstBeat = buildNarratorMessage(athlete, 0);
+  return [prewarmedNarrative ? { ...firstBeat, prewarmed: true } : firstBeat];
+};
+
 export const prewarmNarratorAudio = (athlete) => {
-  const beats = narratorBeats.map((_, index) => buildNarratorMessage(athlete, index));
+  const beats = buildNarratorMessages(athlete);
   void (async () => {
     await synthesizeNarratorAudioToCacheForAthlete(athlete, 0, beats[0].content);
     await Promise.all(
@@ -408,14 +416,11 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   const figmaTwinMode = new URLSearchParams(window.location.search).get("figmaTwin");
   const initialMessages = () => {
     if (figmaTwinMode === "narrator") {
-      return narratorBeats.map((_, index) => buildNarratorMessage(athlete, index));
+      return buildNarratorMessages(athlete);
     }
     if (figmaTwinMode === "qaThread") return qaCaptureMessages(athlete);
     if (mode === "narrator") {
-      return narratorBeats.map((_, index) => {
-        const beat = buildNarratorMessage(athlete, index);
-        return index === 0 && prewarmedNarrative ? { ...beat, prewarmed: true } : beat;
-      });
+      return buildOpeningNarratorMessages(athlete, prewarmedNarrative);
     }
     return [];
   };
@@ -935,14 +940,15 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     const session = currentMediaSession();
     stopVoicePlayback();
     if (!isMediaSessionActive(session)) return;
-    setLoading(true);
-    await wait(620);
-    if (!isMediaSessionActive(session)) return;
-    const nextIndex = narratorIndex.current >= narratorBeats.length - 1 ? 0 : narratorIndex.current + 1;
+    const isRestart = narratorIndex.current >= narratorBeats.length - 1;
+    const nextIndex = isRestart ? 0 : narratorIndex.current + 1;
     narratorIndex.current = nextIndex;
     setActiveBeat(nextIndex);
-    const nextBeat = messages[nextIndex] || await generateNarratorMessage(nextIndex);
-    setMessages(p => p[nextIndex] ? p : [...p, nextBeat]);
+    const nextBeat = await generateNarratorMessage(nextIndex);
+    setMessages(p => {
+      if (isRestart) return [nextBeat];
+      return p[nextIndex] ? p : [...p, nextBeat];
+    });
     setLoading(false);
     playNarratorAudio(nextIndex, nextBeat.content);
   };
@@ -1083,8 +1089,9 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     const session = currentMediaSession();
     pendingNarratorAutoplayRef.current = false;
     modeRef.current = m;
+    const allNarratorMessages = m === "narrator" ? buildNarratorMessages(athlete) : [];
     const narratorMessages = m === "narrator"
-      ? narratorBeats.map((_, index) => buildNarratorMessage(athlete, index))
+      ? buildOpeningNarratorMessages(athlete)
       : [];
     setMessages(narratorMessages);
     setVoiceState("idle");
@@ -1097,7 +1104,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
       if (m === "narrator") {
         pendingNarratorBeatRef.current = 0;
         pendingNarratorAutoplayRef.current = true;
-        void preGenerateNarratorVoices(narratorMessages);
+        void preGenerateNarratorVoices(allNarratorMessages);
       }
       if (m === "qa") openRealtimeWS();
     }, 50);
@@ -1124,9 +1131,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     if (mode === "narrator") {
       pendingNarratorBeatRef.current = 0;
       pendingNarratorAutoplayRef.current = true;
-      void preGenerateNarratorVoices(messages.length > 0
-        ? messages
-        : narratorBeats.map((_, index) => buildNarratorMessage(athlete, index)));
+      void preGenerateNarratorVoices(buildNarratorMessages(athlete));
     }
     if (mode === "qa") {
       // Pre-warm: open WS so session is ready before user asks
