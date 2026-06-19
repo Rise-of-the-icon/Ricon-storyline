@@ -7,6 +7,7 @@ const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const STREAM_ERROR_MESSAGE = "This moment is unavailable from the verified archive. Try a different question.";
 const NARRATOR_VOICE_CACHE_KEY = "ricon:narrator-voice-cache:v6";
 const NARRATOR_MODEL_ID = "inworld-tts-2";
+const RESEARCH_VOICE_CACHE_VERSION = 1;
 
 const NARRATOR_VOICE_ID_BY_MERGE_KEY = {
   "david west": "default--z5zasdfwci5ofrt-gmsjw__test",
@@ -279,9 +280,38 @@ function narratorVoiceIdForAthlete(athlete) {
   );
 }
 
+function narratorStaticAudioUrl(athlete, beatIndex) {
+  const key = athleteKey(athlete);
+  if (key.includes("david west")) return `/narrator-audio/david-west-${beatIndex}.mp3`;
+  if (key.includes("tom hoover")) return `/narrator-audio/tom-hoover-${beatIndex}.mp3`;
+  if (key.includes("walt liquor")) return `/narrator-audio/walt-liquor-${beatIndex}.mp3`;
+  return "";
+}
+
 function narratorCacheId({ athleteName, beatIndex, text, voiceId }) {
   const textPart = btoa(unescape(encodeURIComponent(text))).slice(0, 64);
   return `${clean(athleteName).trim()}::${beatIndex}::${voiceId}::${textPart}`;
+}
+
+async function researchVoiceCacheKey({ text, voiceId, emotionFamily = "Character", modelId = NARRATOR_MODEL_ID }) {
+  if (!window.crypto?.subtle) return "";
+  const payload = {
+    cache_version: RESEARCH_VOICE_CACHE_VERSION,
+    emotion_family: emotionFamily,
+    model_id: modelId,
+    text: text.trim(),
+    voice_id: voiceId.trim(),
+  };
+  const encoded = new TextEncoder().encode(JSON.stringify(payload));
+  const digest = await window.crypto.subtle.digest("SHA-256", encoded);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function researchVoiceCacheUrl(cacheKey) {
+  if (!cacheKey) return "";
+  return `${API_BASE.replace(/\/$/, "")}/static/research_voice/${cacheKey}.mp3`;
 }
 
 function readNarratorCache() {
@@ -512,6 +542,32 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
       }
     });
     return true;
+  };
+
+  const playAudioUrl = async (url, session = currentMediaSession()) => {
+    if (!url || !isMediaSessionActive(session)) return false;
+    const audio = new Audio(url);
+    audio.preload = "auto";
+    audioRef.current = audio;
+    audio.onplay = () => {
+      if (isMediaSessionActive(session)) setVoiceState("speaking");
+    };
+    audio.onended = () => {
+      if (isMediaSessionActive(session)) setVoiceState("idle");
+      if (audioRef.current === audio) audioRef.current = null;
+    };
+    audio.onerror = () => {
+      if (isMediaSessionActive(session)) setVoiceState("idle");
+      if (audioRef.current === audio) audioRef.current = null;
+    };
+    try {
+      await audio.play();
+      return isMediaSessionActive(session);
+    } catch {
+      if (audioRef.current === audio) audioRef.current = null;
+      if (isMediaSessionActive(session)) setVoiceState("idle");
+      return false;
+    }
   };
 
   const synthesizeAthleteVoice = async (text, emotionFamily = "Character") => {
@@ -803,7 +859,29 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
           voiceId,
         });
         const cache = readNarratorCache();
-        const audioBase64 = cache[cacheKey]?.audioBase64 || await synthesizeNarratorAudioToCache(beatIndex, text);
+        const playedStaticAsset = await playAudioUrl(narratorStaticAudioUrl(athlete, beatIndex), session);
+        if (playedStaticAsset) {
+          pendingNarratorAutoplayRef.current = false;
+          removeNarratorRetryListeners();
+          return;
+        }
+
+        const cachedAudioBase64 = cache[cacheKey]?.audioBase64 || "";
+        if (cachedAudioBase64) {
+          playAudioBase64(cachedAudioBase64, session);
+          return;
+        }
+
+        const backendCacheKey = await researchVoiceCacheKey({ text, voiceId });
+        if (!isMediaSessionActive(session)) return;
+        const playedCachedUrl = await playAudioUrl(researchVoiceCacheUrl(backendCacheKey), session);
+        if (playedCachedUrl) {
+          pendingNarratorAutoplayRef.current = false;
+          removeNarratorRetryListeners();
+          return;
+        }
+
+        const audioBase64 = await synthesizeNarratorAudioToCache(beatIndex, text);
         if (!isMediaSessionActive(session)) return;
 
         if (!audioBase64) {

@@ -1,0 +1,62 @@
+{
+  "david-west": [
+    {
+      "file": "david-west-0.mp3",
+      "voice_id": "default--z5zasdfwci5ofrt-gmsjw__test",
+      "cached": true,
+      "cache_key": "fcd52f8aea93f64d71666032590f5146a0976cb6a4b9c9b37332b11e8fdde97e"
+    },
+    {
+      "file": "david-west-1.mp3",
+      "voice_id": "default--z5zasdfwci5ofrt-gmsjw__test",
+      "cached": true,
+      "cache_key": "67e174215bd98bcc51c3c28436534fbc6f0026bb917959e7f5ab005e0b270c6f"
+    },
+    {
+      "file": "david-west-2.mp3",
+      "voice_id": "default--z5zasdfwci5ofrt-gmsjw__test",
+      "cached": true,
+      "cache_key": "cd91994542b160265ae68a4fdb7ab5355e410f240c04b86b2f8c80757707eba7"
+    }
+  ],
+  "tom-hoover": [
+    {
+      "file": "tom-hoover-0.mp3",
+      "voice_id": "default--z5zasdfwci5ofrt-gmsjw__tom_hoover",
+      "cached": true,
+      "cache_key": "2b60d174193d141c54371e350c58d41e74c2fd117cede9113d1112f60ce06195"
+    },
+    {
+      "file": "tom-hoover-1.mp3",
+      "voice_id": "default--z5zasdfwci5ofrt-gmsjw__tom_hoover",
+      "cached": true,
+      "cache_key": "deb40e0efa9a3cfb255a8cf8746c79f6e6698008d01309fba77e69955d034293"
+    },
+    {
+      "file": "tom-hoover-2.mp3",
+      "voice_id": "default--z5zasdfwci5ofrt-gmsjw__tom_hoover",
+      "cached": true,
+      "cache_key": "462b66f48b01f7a1da629efec826a5b1246047edd9017b02dd542b64b70add36"
+    }
+  ],
+  "walt-liquor": [
+    {
+      "file": "walt-liquor-0.mp3",
+      "voice_id": "default--z5zasdfwci5ofrt-gmsjw__walt",
+      "cached": true,
+      "cache_key": "37bff9a2abf2bb3ae3aaf5d06627bc75560f9d9e66df7ab2ecc203d2f9a70147"
+    },
+    {
+      "file": "walt-liquor-1.mp3",
+      "voice_id": "default--z5zasdfwci5ofrt-gmsjw__walt",
+      "cached": true,
+      "cache_key": "8a2f608813925a70ff3657b1d1c65a8ce0ef5f2af4eda68b6a6be1942330bd5f"
+    },
+    {
+      "file": "walt-liquor-2.mp3",
+      "voice_id": "default--z5zasdfwci5ofrt-gmsjw__walt",
+      "cached": true,
+      "cache_key": "d85384a6a815f8d96bb33f92088b5bfca33f6c3b33332edb99e750bc970fc665"
+    }
+  ]
+}
