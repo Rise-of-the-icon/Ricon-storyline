@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FEATURED_HERO, FEATURED_PICKS, FILTERS, LEGENDS } from "../data/athletes";
 import { buildLegendMergeKey, fetchRemoteLegends } from "../data/remoteTwins";
 import AthleteCard from "./AthleteCard";
+import { prewarmNarratorAudio } from "./TwinModal";
+
+const NARRATOR_PREWARM_KEYS = new Set(["david west", "tom hoover", "walt liquor"]);
 
 function FeaturedStoryCard({ legend, delay, onClick }) {
   const label = legend.cat === "music" ? legend.genreLabel : legend.leagueLabel;
@@ -33,6 +36,7 @@ export default function HomeScreen({ onSelect }) {
   const [heroVisible, setHeroVisible] = useState(true);
   const [filter, setFilter] = useState("all");
   const [allLegends, setAllLegends] = useState(LEGENDS);
+  const narratorPrewarmedKeys = useRef(new Set());
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
@@ -88,6 +92,15 @@ export default function HomeScreen({ onSelect }) {
       setAllLegends([...merged, ...newOnes]);
     });
   }, []);
+
+  useEffect(() => {
+    allLegends.forEach((legend) => {
+      const key = buildLegendMergeKey(legend.name);
+      if (!NARRATOR_PREWARM_KEYS.has(key) || narratorPrewarmedKeys.current.has(key)) return;
+      narratorPrewarmedKeys.current.add(key);
+      prewarmNarratorAudio(legend);
+    });
+  }, [allLegends]);
 
   const activeFilter = FILTERS.find((item) => item.id === filter) || FILTERS[0];
   const hero = FEATURED_HERO[heroIndex];

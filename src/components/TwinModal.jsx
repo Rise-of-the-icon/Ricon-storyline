@@ -352,11 +352,21 @@ function base64ToAudioUrl(audioBase64) {
 
 export const OPENING_NARRATIVE_PROMPT = "Begin the story of your career from the beginning, in one paragraph.";
 
-export const prewarmOpeningNarrative = async (athlete) => {
+export const prewarmNarratorAudio = (athlete) => {
   const beats = narratorBeats.map((_, index) => buildNarratorMessage(athlete, index));
-  void Promise.all(
-    beats.map((beat, index) => synthesizeNarratorAudioToCacheForAthlete(athlete, index, beat.content))
-  );
+  void (async () => {
+    await synthesizeNarratorAudioToCacheForAthlete(athlete, 0, beats[0].content);
+    await Promise.all(
+      beats.slice(1).map((beat, offset) =>
+        synthesizeNarratorAudioToCacheForAthlete(athlete, offset + 1, beat.content)
+      )
+    );
+  })();
+  return beats;
+};
+
+export const prewarmOpeningNarrative = async (athlete) => {
+  const beats = prewarmNarratorAudio(athlete);
   return {
     ...beats[0],
     prompt: OPENING_NARRATIVE_PROMPT,
