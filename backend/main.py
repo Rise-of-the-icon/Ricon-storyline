@@ -418,6 +418,8 @@ Write one concise audio-friendly paragraph for the chapter: {chapter}.
 Use only the grounded profile details below, which come from verified Studio data such as Wikipedia, BDL, and reviewed custom moments.
 Do not mention "profile", "database", "verified record", "Wikipedia", "BDL", "Studio", or "archive".
 Do not use third person for {name}. Use "I", "my", and "me" throughout.
+Do not copy any source sentence that says "{name}" or uses third-person wording. Rewrite every fact as lived memory.
+After the opening "I am {name}." sentence, do not say "{name}" again.
 Do not say "I am {name}" unless this is chapter 0. If chapter 0, start exactly with "I am {name}."
 Keep it natural and biographical, not a list of facts. 85-120 words.
 

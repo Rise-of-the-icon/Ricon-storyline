@@ -5,8 +5,8 @@ const WS_BASE  = (import.meta.env.VITE_TWIN_API_URL || "https://ricon-storyline-
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const STREAM_ERROR_MESSAGE = "This moment is unavailable from the verified archive. Try a different question.";
-const NARRATOR_VOICE_CACHE_KEY = "ricon:narrator-voice-cache:v5";
-const NARRATOR_SCRIPT_CACHE_KEY = "ricon:narrator-script-cache:v1";
+const NARRATOR_VOICE_CACHE_KEY = "ricon:narrator-voice-cache:v6";
+const NARRATOR_SCRIPT_CACHE_KEY = "ricon:narrator-script-cache:v2";
 const NARRATOR_MODEL_ID = "inworld-tts-2";
 
 const NARRATOR_VOICE_ID_BY_MERGE_KEY = {
@@ -24,6 +24,13 @@ const NARRATOR_VOICE_ID_BY_TWIN_ID = {
 
 const clean = (value) => value.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
 const STOP_WORDS = new Set(["what", "when", "where", "your", "were", "with", "that", "this", "from", "about", "moment"]);
+
+const athleteKey = (athlete) => clean(`${athlete?.id || ""} ${athlete?.name || ""}`).replace(/\s+/g, " ").trim();
+const isDavidWest = (athlete) => athleteKey(athlete).includes("west d") || athleteKey(athlete).includes("david west");
+const isAiNarratorAthlete = (athlete) => {
+  const key = athleteKey(athlete);
+  return key.includes("tom hoover") || key.includes("walt liquor");
+};
 
 const signatureMoment = (athlete) => {
   return [...athlete.moments].reverse().find(moment => moment.type === "iconic" || moment.type === "championship")
@@ -102,7 +109,7 @@ const narratorMomentBody = (athlete, moment) => {
 };
 
 const isStudioAnthropicQaAthlete = (athlete) => {
-  const key = clean(`${athlete?.id || ""} ${athlete?.name || ""}`).replace(/\s+/g, " ").trim();
+  const key = athleteKey(athlete);
   return athlete?.id === "west_d" ||
     athlete?.id === "2aa2a157-7849-44a7-b695-f715c39d5bd7" ||
     athlete?.id === "c28f8898-da88-4887-b1e9-2d61396a91b9" ||
@@ -144,12 +151,56 @@ const narratorBeats = [
   },
 ];
 
+const buildDavidNarratorMessage = (athlete, beatIndex) => {
+  const beat = narratorBeats[beatIndex % narratorBeats.length];
+  const moments = athlete?.moments || [];
+  const moment = beat.getMoment(athlete);
+  const lines = [
+    "I am David West. My story starts at Xavier, where the work became visible before the league ever called my name. By 2003, I was the AP National Player of the Year, my jersey was already retired, and New Orleans took me eighteenth overall. I entered the league knowing exactly what I valued: preparation, intelligence, and earning every inch.",
+    "The middle of my career was about proving that substance still matters. I became an All-Star, battled through the New Orleans and Indiana chapters, and played the game with a physicality and patience that reflected who I was. When I walked away from money to chase something bigger, that was not a stunt. That was conviction.",
+    "Legacy, to me, is not just two championships or fifteen seasons. It is the choices behind the record: what I gave up, what I stood for, and how I carried the work when nobody was measuring it. I won in Golden State, but the meaning was built long before the rings. That is the part I want people to understand.",
+  ];
+  return {
+    role: "assistant",
+    content: lines[beatIndex % lines.length],
+    moment: moment || moments[beatIndex % Math.max(moments.length, 1)],
+    media: beat.media,
+  };
+};
+
 const buildNarratorMessage = (athlete, beatIndex) => {
+  if (isDavidWest(athlete)) return buildDavidNarratorMessage(athlete, beatIndex);
   const beat = narratorBeats[beatIndex % narratorBeats.length];
   const moment = beat.getMoment(athlete);
   return {
     role: "assistant",
     content: beat.line(athlete),
+    moment,
+    media: beat.media,
+  };
+};
+
+const cleanNarratorFallbackMessage = (athlete, beatIndex) => {
+  const beat = narratorBeats[beatIndex % narratorBeats.length];
+  const moment = beat.getMoment(athlete);
+  const name = athlete?.name || "I";
+  const first = athlete?.moments?.[0] || moment;
+  const signature = signatureMoment(athlete);
+  const final = athlete?.moments?.[athlete.moments.length - 1] || signature;
+  const statSummary = statLine(athlete);
+  const role = athlete?.cat === "music"
+    ? athlete?.genreLabel || "music"
+    : athlete?.position || "the work";
+
+  const lines = [
+    `I am ${name}. My story starts with ${first.y}: ${first.title}. That was the first clear signal of the work I was stepping into, and it shaped how I carried myself from there.`,
+    `The turning point I keep coming back to is ${signature.y}: ${signature.title}. It was not just a line in the record. It was a moment where I had to prove what my ${role} meant under real pressure.`,
+    `When people look back, I want them to understand the whole arc: ${statSummary}. The facts matter, but the meaning lives in moments like ${final.y}: ${final.title}. That is the part I want people to hear.`,
+  ];
+
+  return {
+    role: "assistant",
+    content: lines[beatIndex % lines.length],
     moment,
     media: beat.media,
   };
@@ -288,7 +339,7 @@ export const OPENING_NARRATIVE_PROMPT = "Begin the story of your career from the
 export const prewarmOpeningNarrative = async (athlete) => {
   await wait(650);
   return {
-    ...buildNarratorMessage(athlete, 0),
+    ...(isAiNarratorAthlete(athlete) ? cleanNarratorFallbackMessage(athlete, 0) : buildNarratorMessage(athlete, 0)),
     prompt: OPENING_NARRATIVE_PROMPT,
     prewarmed: true,
   };
@@ -434,8 +485,10 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   };
 
   const generateNarratorMessage = async (beatIndex) => {
-    const fallback = buildNarratorMessage(athlete, beatIndex);
-    if (!isStudioAnthropicQaAthlete(athlete)) return fallback;
+    const fallback = isAiNarratorAthlete(athlete)
+      ? cleanNarratorFallbackMessage(athlete, beatIndex)
+      : buildNarratorMessage(athlete, beatIndex);
+    if (!isAiNarratorAthlete(athlete)) return fallback;
     const scriptCacheKey = narratorScriptCacheId(athlete, beatIndex);
     const scriptCache = readNarratorScriptCache();
     const cachedText = scriptCache[scriptCacheKey]?.text;
@@ -455,6 +508,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
       const payload = await response.json();
       const text = (payload.text || "").trim();
       if (!text) return fallback;
+      const name = athlete?.name || "";
+      if (name && new RegExp(`\\b${escapeRegExp(name)}\\b`).test(text.replace(/^I am [^.]+\./, ""))) return fallback;
       scriptCache[scriptCacheKey] = {
         text,
         generatedAtISO: new Date().toISOString(),
@@ -775,7 +830,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
 
   const triggerNarrator = async () => {
     stopVoicePlayback();
-    if (prewarmedNarrative) {
+    if (prewarmedNarrative && !isAiNarratorAthlete(athlete)) {
       setLoading(false);
       narratorIndex.current = 0;
       setActiveBeat(0);
