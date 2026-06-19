@@ -444,6 +444,11 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
         voice_id: narratorVoiceIdForAthlete(athlete),
         profile: athlete,
       }));
+      if (pendingQuestionRef.current) {
+        socket.send(JSON.stringify({ type: "question", text: pendingQuestionRef.current }));
+        pendingQuestionRef.current = null;
+        startResponseTimer();
+      }
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       heartbeatRef.current = setInterval(() => {
         if (socket.readyState === WebSocket.OPEN) {
@@ -727,7 +732,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     currentMsgRef.current = { index: assistantIndex, buffer: "", audioStarted: false, question };
     pendingQuestionRef.current = question;
 
-    if (wsRef.current?.readyState === WebSocket.OPEN && wsReadyRef.current) {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "question", text: question }));
       pendingQuestionRef.current = null;
       startResponseTimer();

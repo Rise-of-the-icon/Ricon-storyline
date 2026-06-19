@@ -13,6 +13,7 @@ import base64
 import hashlib
 import asyncio
 import pathlib
+import uuid
 import requests
 import websockets as ws_lib
 from websockets.protocol import State
@@ -90,7 +91,7 @@ Voice delivery for David's cloned audio:
 
 DAVID_REALTIME_PROMPT = f"{SYSTEM_PROMPT}\n\n{DAVID_NONVERBAL_VOICE_PROMPT}"
 
-INWORLD_REALTIME_URL = "wss://api.inworld.ai/api/v1/realtime/session?key=ricon-twin&protocol=realtime"
+INWORLD_REALTIME_URL_BASE = "wss://api.inworld.ai/api/v1/realtime/session"
 INWORLD_WS_HEADERS   = {"Authorization": f"Basic {INWORLD_API_KEY}"}
 
 def build_realtime_session_config(
@@ -541,8 +542,10 @@ def is_open(conn) -> bool:
 
 async def open_inworld_session(session_config: dict | None = None):
     config = session_config or SESSION_CONFIG
+    session_key = f"ricon-twin-{uuid.uuid4().hex}"
+    realtime_url = f"{INWORLD_REALTIME_URL_BASE}?key={session_key}&protocol=realtime"
     inworld = await ws_lib.connect(
-        INWORLD_REALTIME_URL,
+        realtime_url,
         additional_headers=INWORLD_WS_HEADERS,
         ping_interval=20,
         ping_timeout=60,
