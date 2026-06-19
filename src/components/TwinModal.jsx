@@ -71,7 +71,7 @@ const narratorBeats = [
     line: (athlete) => {
       const first = athlete.moments[0];
       const signature = athlete.moments.find(m => m.type === "championship" || m.type === "record") || athlete.moments[1] || first;
-      return `I am ${athlete.name}. ${athlete.years} was the arc, but ${first.y} is where the signal first broke through. ${first.body} From there, every season became evidence. ${signature.y}: ${signature.title}. That is one of the moments people use to explain me, because it still carries the weight of what I was built to do.`;
+      return `I am ${athlete.name}. ${athlete.years} was the arc, but ${first.y} is where my story first broke through. ${first.body} From there, I kept building evidence through the work itself. ${signature.y}: ${signature.title}. I still point to that moment because it carries the weight of what I was trying to do.`;
     },
   },
   {
@@ -80,7 +80,7 @@ const narratorBeats = [
     line: (athlete) => {
       const turn = athlete.moments[Math.min(2, athlete.moments.length - 1)];
       const title = athlete.moments.find(m => m.type === "championship") || turn;
-      return `The turning point was not one play. It was the moment the league understood I could bend the story around me. In ${turn.y}, ${turn.title} became documented proof. Then ${title.y} arrived: ${title.title}. Talent became standard. Standard became pressure. Pressure became legacy.`;
+      return `The turning point was not only one play, one song, or one headline. It was the moment I understood I could shape the story through what I did next. In ${turn.y}, ${turn.title} became proof of that. Then ${title.y} arrived: ${title.title}. I had to turn talent into a standard, that standard into pressure, and that pressure into legacy.`;
     },
   },
   {
@@ -91,7 +91,7 @@ const narratorBeats = [
     getMoment: (athlete) => athlete.moments[athlete.moments.length - 1],
     line: (athlete) => {
       const final = athlete.moments[athlete.moments.length - 1];
-      return `Legacy is what remains after the numbers stop moving. Mine reads like this: ${statLine(athlete)}. But the record only matters because it is attached to lived moments. ${final.y}: ${final.title}. ${final.body} That is the part the archive keeps.`;
+      return `Legacy is what remains after the numbers stop moving. My line reads like this: ${statLine(athlete)}. But those facts only matter because I lived the moments behind them. ${final.y}: ${final.title}. ${final.body} That is the part I want people to hear when they listen back.`;
     },
   },
 ];
