@@ -370,6 +370,9 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   const pendingNarratorAutoplayRef = useRef(false);
   const pendingNarratorBeatRef = useRef(0);
   const narratorRetryHandlerRef = useRef(null);
+  const mediaSessionRef = useRef(0);
+  const mountedRef = useRef(false);
+  const switchModeTimerRef = useRef(null);
   const modalRef = useRef(null);
   const closeButtonRef = useRef(null);
   const previousActiveElement = useRef(null);
@@ -414,6 +417,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     if (audioRef.current) {
       audioRef.current.pause?.();
       audioRef.current.currentTime = 0;
+      audioRef.current.src = "";
+      audioRef.current.load?.();
       audioRef.current = null;
     }
     stopStreamingAudio();
@@ -421,27 +426,48 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     setVoiceSessionActive(false);
   };
 
-  const playAudioBase64 = (audioBase64) => {
-    if (!audioBase64) return false;
+  const currentMediaSession = () => mediaSessionRef.current;
+  const isMediaSessionActive = (session) => mountedRef.current && session === mediaSessionRef.current;
+  const invalidateMediaSession = () => {
+    mediaSessionRef.current += 1;
+    pendingNarratorAutoplayRef.current = false;
+    pendingQuestionRef.current = null;
+    if (switchModeTimerRef.current) {
+      window.clearTimeout(switchModeTimerRef.current);
+      switchModeTimerRef.current = null;
+    }
+  };
+
+  const playAudioBase64 = (audioBase64, session = currentMediaSession()) => {
+    if (!audioBase64 || !isMediaSessionActive(session)) return false;
     stopVoicePlayback();
+    if (!isMediaSessionActive(session)) return false;
     const src = base64ToAudioUrl(audioBase64);
     const audio = new Audio(src);
     audioRef.current = audio;
-    audio.onplay = () => setVoiceState("speaking");
+    audio.onplay = () => {
+      if (isMediaSessionActive(session)) setVoiceState("speaking");
+    };
     audio.onended = () => {
       URL.revokeObjectURL(src);
-      setVoiceState("idle");
-      setVoiceSessionActive(false);
+      if (isMediaSessionActive(session)) {
+        setVoiceState("idle");
+        setVoiceSessionActive(false);
+      }
     };
     audio.onerror = () => {
       URL.revokeObjectURL(src);
-      setVoiceState("idle");
-      setVoiceSessionActive(false);
+      if (isMediaSessionActive(session)) {
+        setVoiceState("idle");
+        setVoiceSessionActive(false);
+      }
     };
     audio.play().catch(() => {
       URL.revokeObjectURL(src);
-      setVoiceState("idle");
-      setVoiceSessionActive(false);
+      if (isMediaSessionActive(session)) {
+        setVoiceState("idle");
+        setVoiceSessionActive(false);
+      }
     });
     return true;
   };
@@ -571,15 +597,18 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   };
 
   const playNonStreamingQaAnswer = async (question, assistantIndex) => {
+    const session = currentMediaSession();
     const generated = await generateProfileQaAnswer(question);
+    if (!isMediaSessionActive(session)) return;
     const reply = generated?.text || answerQuestion(athlete, question);
     setMessages(p => p.map((m, i) =>
       i === assistantIndex ? { ...m, content: reply, streaming: false } : m
     ));
     setLoading(false);
     const audioBase64 = await synthesizeAthleteVoice(reply, "Character");
+    if (!isMediaSessionActive(session)) return;
     if (audioBase64) {
-      playAudioBase64(audioBase64);
+      playAudioBase64(audioBase64, session);
       return;
     }
     setMessages(p => p.map((m, i) =>
@@ -714,6 +743,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   };
 
   const hardStopMedia = () => {
+    invalidateMediaSession();
     if (voiceTimer.current) window.clearTimeout(voiceTimer.current);
     if (recognitionRef.current) {
       recognitionRef.current.onend = null;
@@ -723,6 +753,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     if (audioRef.current) {
       audioRef.current.pause?.();
       audioRef.current.currentTime = 0;
+      audioRef.current.src = "";
+      audioRef.current.load?.();
       audioRef.current = null;
     }
     stopStreamingAudio();
@@ -734,6 +766,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
+    mountedRef.current = true;
     previousActiveElement.current = document.activeElement;
     window.requestAnimationFrame(() => {
       if (mode === "qa") inputRef.current?.focus();
@@ -770,6 +803,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
 
     document.addEventListener("keydown", handleKeyDown);
     return () => {
+      mountedRef.current = false;
+      hardStopMedia();
       document.removeEventListener("keydown", handleKeyDown);
       previousActiveElement.current?.focus?.();
     };
@@ -782,9 +817,12 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   }, []);
 
   const playNarratorAudio = (beatIndex, textOverride = "") => {
+    const session = currentMediaSession();
     const run = async () => {
       try {
+        if (!isMediaSessionActive(session)) return;
         stopVoicePlayback();
+        if (!isMediaSessionActive(session)) return;
         const beat = messages[beatIndex];
         const text = textOverride || beat?.content || buildNarratorMessage(athlete, beatIndex).content;
         const voiceId = narratorVoiceIdForAthlete(athlete);
@@ -796,6 +834,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
         });
         const cache = readNarratorCache();
         const audioBase64 = cache[cacheKey]?.audioBase64 || await synthesizeNarratorAudioToCache(beatIndex, text);
+        if (!isMediaSessionActive(session)) return;
 
         if (!audioBase64) {
           throw new Error("No narrator audio available");
@@ -804,25 +843,30 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
         const src = base64ToAudioUrl(audioBase64);
         const audio = new Audio(src);
         audioRef.current = audio;
-        audio.onplay = () => setVoiceState("speaking");
+        audio.onplay = () => {
+          if (isMediaSessionActive(session)) setVoiceState("speaking");
+        };
         audio.onended = () => {
           URL.revokeObjectURL(src);
-          setVoiceState("idle");
+          if (isMediaSessionActive(session)) setVoiceState("idle");
         };
         audio.onerror = () => {
           URL.revokeObjectURL(src);
-          setVoiceState("idle");
+          if (isMediaSessionActive(session)) setVoiceState("idle");
         };
         audio.currentTime = 0;
         audio.play().then(() => {
+          if (!isMediaSessionActive(session)) return;
           pendingNarratorAutoplayRef.current = false;
           removeNarratorRetryListeners();
         }).catch(() => {
+          if (!isMediaSessionActive(session)) return;
           setVoiceState("idle");
           pendingNarratorAutoplayRef.current = true;
           pendingNarratorBeatRef.current = beatIndex;
           if (!narratorRetryHandlerRef.current) {
             narratorRetryHandlerRef.current = () => {
+              if (!isMediaSessionActive(session)) return;
               const beatToRetry = pendingNarratorBeatRef.current;
               removeNarratorRetryListeners();
               pendingNarratorAutoplayRef.current = false;
@@ -833,22 +877,27 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
           }
         });
       } catch {
-        setVoiceState("idle");
+        if (isMediaSessionActive(session)) setVoiceState("idle");
       }
     };
     void run();
   };
 
   const triggerNarrator = async () => {
+    const session = currentMediaSession();
     stopVoicePlayback();
+    if (!isMediaSessionActive(session)) return;
     setLoading(true);
     narratorIndex.current = 0;
     setActiveBeat(0);
     await wait(650);
+    if (!isMediaSessionActive(session)) return;
     const beats = await Promise.all(
       narratorBeats.map((_, index) => generateNarratorMessage(index))
     );
+    if (!isMediaSessionActive(session)) return;
     await preGenerateNarratorVoices(beats);
+    if (!isMediaSessionActive(session)) return;
     setMessages(beats.map((beat, index) => (
       index === 0 && prewarmedNarrative && !isAiNarratorAthlete(athlete)
         ? { ...beat, prewarmed: true }
@@ -860,9 +909,12 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   };
 
   const continueNarrator = async () => {
+    const session = currentMediaSession();
     stopVoicePlayback();
+    if (!isMediaSessionActive(session)) return;
     setLoading(true);
     await wait(620);
+    if (!isMediaSessionActive(session)) return;
     const nextIndex = narratorIndex.current >= narratorBeats.length - 1 ? 0 : narratorIndex.current + 1;
     narratorIndex.current = nextIndex;
     setActiveBeat(nextIndex);
@@ -874,7 +926,9 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
 
   const selectNarratorBeat = async (index) => {
     if (loading) return;
+    const session = currentMediaSession();
     stopVoicePlayback();
+    if (!isMediaSessionActive(session)) return;
     setActiveBeat(index);
     narratorIndex.current = index;
     if (messages[index]) {
@@ -883,10 +937,12 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     }
     setLoading(true);
     await wait(420);
+    if (!isMediaSessionActive(session)) return;
     narratorIndex.current = Math.max(narratorIndex.current, index);
     const generatedBeats = await Promise.all(
       Array.from({ length: index + 1 }, (_, i) => messages[i] || generateNarratorMessage(i))
     );
+    if (!isMediaSessionActive(session)) return;
     let targetBeat = generatedBeats[index] || null;
     setMessages(p => {
       const next = [...p];
@@ -903,6 +959,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     const question = (questionOverride ?? input).trim();
     if (!question || loading) return;
 
+    invalidateMediaSession();
     setMessages(p => [...p, { role: "user", content: question }]);
     setInput("");
     setLoading(true);
@@ -1000,6 +1057,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   const switchMode = (m) => {
     if (m === modeRef.current) return;
     hardStopMedia();
+    const session = currentMediaSession();
     pendingNarratorAutoplayRef.current = false;
     modeRef.current = m;
     setMessages([]);
@@ -1007,8 +1065,12 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     setVoiceSessionActive(false);
     setLoading(false);
     onSwitchMode(m);
-    if (m === "narrator") setTimeout(triggerNarrator, 50);
-    if (m === "qa") setTimeout(openRealtimeWS, 50);
+    switchModeTimerRef.current = window.setTimeout(() => {
+      switchModeTimerRef.current = null;
+      if (!isMediaSessionActive(session)) return;
+      if (m === "narrator") triggerNarrator();
+      if (m === "qa") openRealtimeWS();
+    }, 50);
   };
 
   const handleClose = () => {
