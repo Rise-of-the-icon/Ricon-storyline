@@ -53,43 +53,16 @@ export default function HomeScreen({ onSelect }) {
   useEffect(() => {
     fetchRemoteLegends().then((remote) => {
       if (remote.length === 0) return;
-      const remoteByKey = new Map(remote.map((r) => [buildLegendMergeKey(r.name), r]));
-      const merged = LEGENDS.map((l) => {
-        const r = remoteByKey.get(buildLegendMergeKey(l.name));
-        if (!r) return l;
-        return {
-          ...r,
-          headshot: r.headshot || l.headshot,
-          stats: l.stats.map((s) => {
-            const bdl = r._bdl;
-            const wiki = r._wiki;
-            if (s.l === "PPG") {
-              const v = wiki?.PPG || bdl?.recent_season?.ppg;
-              return v ? { ...s, v: String(v) } : s;
-            }
-            if (s.l === "RPG") {
-              const v = wiki?.RPG || bdl?.recent_season?.rpg;
-              return v ? { ...s, v: String(v) } : s;
-            }
-            if (s.l === "APG") {
-              const v = wiki?.APG || bdl?.recent_season?.apg;
-              return v ? { ...s, v: String(v) } : s;
-            }
-            if (s.l === "Championships") {
-              const v = wiki?.Championships;
-              return v ? { ...s, v: String(v) } : s;
-            }
-            if (s.l === "All-Stars") {
-              const v = wiki?.["All-Stars"];
-              return v ? { ...s, v: String(v) } : s;
-            }
-            return s;
-          }),
-        };
-      });
+      // The hardcoded LEGENDS are the curated source of truth for every profile's
+      // name, photo, and story data (already calibrated against Wikipedia + BDL).
+      // Curated profiles — including David West, Tom Hoover, and Walt Liquor — are
+      // baked into LEGENDS, so they render on first paint and are never overwritten
+      // or delayed by this network call. Remote twins only ADD people who aren't
+      // already represented locally.
       const localKeys = new Set(LEGENDS.map((l) => buildLegendMergeKey(l.name)));
       const newOnes = remote.filter((r) => !localKeys.has(buildLegendMergeKey(r.name)));
-      setAllLegends([...merged, ...newOnes]);
+      if (newOnes.length === 0) return;
+      setAllLegends([...LEGENDS, ...newOnes]);
     });
   }, []);
 

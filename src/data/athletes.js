@@ -98,6 +98,21 @@ export const ATHLETES = [
       {y:"2018",era:"Golden State",type:"championship",title:"Back-to-Back Champion",body:"The Warriors sweep Cleveland. West wins his second consecutive championship and retires as a two-time NBA champion. He played 15 seasons, took two pay cuts, and won twice. The math speaks for itself.",source:"NBA Finals Records, 2018",src:"NBA Finals Records, 2018"},
     ],
   },
+  {
+    id:"hoover_t", name:"Tom Hoover", initials:"TH", years:"1963 – 1969", position:"C / F",
+    tagline:"The work held — through every league the game could throw at him.",
+    teams:"New York Knicks · St. Louis Hawks · Denver Rockets · New York Nets",
+    stats:[{l:"PPG",v:"5.9"},{l:"RPG",v:"6.2"},{l:"EPBL Titles",v:"2"},{l:"Leagues",v:"NBA · ABA"}],
+    voice:"Direct, grounded, and unhurried. Speaks about a journeyman's career with restraint and specificity. Lets persistence — not promotion — carry the story.",
+    moments:[
+      {y:"1960",era:"Washington to Villanova",type:"iconic",title:"Villanova Frontcourt",body:"A 6-foot-9 forward-center out of Washington, D.C., Tom Hoover plays college basketball at Villanova from 1960 to 1962. Height is only the starting point — he builds the timing, toughness, and patience the next level will demand.",source:"Wikipedia · Tom Hoover (basketball)",src:"Wikipedia · Tom Hoover (basketball)"},
+      {y:"1963",era:"The Draft",type:"draft",title:"Sixth Overall in the 1963 NBA Draft",body:"Hoover is selected in the first round of the 1963 NBA draft — sixth overall, by the Syracuse Nationals, the franchise that would become the Philadelphia 76ers. The work has earned him a place in the professional game.",source:"NBA Draft Records, 1963",src:"NBA Draft Records, 1963"},
+      {y:"1963",era:"NBA Years",type:"record",title:"Debuts with the New York Knicks",body:"Hoover begins his NBA career with the New York Knicks, appearing in 59 games in 1963-64 and averaging 4.8 points and 5.6 rebounds. He later also plays for the St. Louis Hawks.",source:"Basketball-Reference · Tom Hoover",src:"Basketball-Reference · Tom Hoover"},
+      {y:"1966",era:"Wilmington",type:"championship",title:"Back-to-Back EPBL Titles",body:"With the Wilmington Blue Bombers, Hoover wins Eastern Professional Basketball League championships in 1966 and 1967. The titles come the hard way — through repetition, trust, and a team that knows how to win.",source:"EPBL Records, 1966–1967",src:"EPBL Records, 1966–1967"},
+      {y:"1967",era:"The ABA",type:"iconic",title:"Into the American Basketball Association",body:"Hoover joins the ABA, playing for the Denver Rockets, Houston Mavericks, Minnesota Pipers, and New York Nets as the new league finds its footing. He keeps showing up inside the change.",source:"Wikipedia · Tom Hoover (basketball)",src:"Wikipedia · Tom Hoover (basketball)"},
+      {y:"1970",era:"After the Game",type:"retirement",title:"A Wide-Ranging Life After Basketball",body:"After basketball, Hoover runs an employment program for New York City teenagers, works as a road manager in entertainment, serves with the New York State Athletic Commission in boxing, and helps direct an Adopt-A-School program. The persistence outlasts the playing career.",source:"Wikipedia · Tom Hoover (basketball)",src:"Wikipedia · Tom Hoover (basketball)"},
+    ],
+  },
 ];
 
 const withSportsDefaults = (legend, league, leagueLabel) => ({
@@ -218,6 +233,18 @@ export const MLB_LEGENDS = [
 ];
 
 export const MUSIC_LEGENDS = [
+  withMusicDefaults({
+    id:"liquor_w", name:"Walt Liquor", initials:"WL", years:"2020 – present", headshot:"/portraits/walt-liquor.jpg",
+    tagline:"He trusted his own ear before anyone else would.",
+    credits:"All The Queen's Men · Tyler Perry Studios",
+    stats:[{l:"Breakthrough",v:"2020"},{l:"Studio",v:"Tyler Perry"},{l:"Hit Series",v:"ATQM"},{l:"Role",v:"Supervisor"}],
+    voice:"Reflective, precise, and self-assured. Talks about sound as instinct first and structure second. Believes you grow into the work by taking it seriously before anyone is certain you can.",
+    moments:[
+      {y:"2020",era:"The Opportunity",type:"draft",title:"Fake It Till You Make It",body:"In December 2020, Walt Liquor is given his first chance to music-supervise a major television production. He has never done it before — but he steps into the room like he belongs there, trusting his ear and his instincts.",source:"Producer-provided Walt Liquor narrative",src:"Producer-provided Walt Liquor narrative"},
+      {y:"2020",era:"Finding the Sound",type:"iconic",title:"Turning Pressure Into Taste",body:"A producer hears something in his unconventional choices and gives him room to fix mistakes before they become visible. That room lets him shape the music around the show instead of just filling space.",source:"Producer-provided Walt Liquor narrative",src:"Producer-provided Walt Liquor narrative"},
+      {y:"2021",era:"The Proof",type:"record",title:"All The Queen's Men Breaks Out",body:"The work fits the show, and All The Queen's Men becomes one of Tyler Perry Studios' top-performing titles. The lesson holds: sometimes you grow into the job by taking it seriously before anyone is sure you can.",source:"Producer-provided Walt Liquor narrative",src:"Producer-provided Walt Liquor narrative"},
+    ],
+  }, "music", "Music"),
   withMusicDefaults({
     id:"tupac", name:"Tupac Shakur", initials:"2P", years:"1991 – 1996",
     tagline:"He spoke the truth before the world was ready to hear it.",
