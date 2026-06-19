@@ -6,7 +6,6 @@ const WS_BASE  = (import.meta.env.VITE_TWIN_API_URL || "https://ricon-storyline-
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const STREAM_ERROR_MESSAGE = "This moment is unavailable from the verified archive. Try a different question.";
 const NARRATOR_VOICE_CACHE_KEY = "ricon:narrator-voice-cache:v6";
-const NARRATOR_SCRIPT_CACHE_KEY = "ricon:narrator-script-cache:v2";
 const NARRATOR_MODEL_ID = "inworld-tts-2";
 
 const NARRATOR_VOICE_ID_BY_MERGE_KEY = {
@@ -27,10 +26,8 @@ const STOP_WORDS = new Set(["what", "when", "where", "your", "were", "with", "th
 
 const athleteKey = (athlete) => clean(`${athlete?.id || ""} ${athlete?.name || ""}`).replace(/\s+/g, " ").trim();
 const isDavidWest = (athlete) => athleteKey(athlete).includes("west d") || athleteKey(athlete).includes("david west");
-const isAiNarratorAthlete = (athlete) => {
-  const key = athleteKey(athlete);
-  return key.includes("tom hoover") || key.includes("walt liquor");
-};
+const isTomHoover = (athlete) => athleteKey(athlete).includes("tom hoover");
+const isWaltLiquor = (athlete) => athleteKey(athlete).includes("walt liquor");
 
 const signatureMoment = (athlete) => {
   return [...athlete.moments].reverse().find(moment => moment.type === "iconic" || moment.type === "championship")
@@ -168,39 +165,49 @@ const buildDavidNarratorMessage = (athlete, beatIndex) => {
   };
 };
 
+const buildTomNarratorMessage = (athlete, beatIndex) => {
+  const beat = narratorBeats[beatIndex % narratorBeats.length];
+  const moments = athlete?.moments || [];
+  const moment = beat.getMoment(athlete);
+  const lines = [
+    "I am Tom Hoover. My story starts in Washington, D.C., and it moved through Villanova, where I learned how much the game asks from a big man. I was 6-foot-9, but height was only the beginning. I had to build timing, toughness, and patience, because every step after college demanded more than potential.",
+    "The next chapter was about staying with the work. I played through the professional basketball landscape of the 1960s, when opportunity was never simple and every roster spot had to be earned. Wilmington became part of that story, and the EPBL titles there mattered because they came through repetition, trust, and a team that knew how to win.",
+    "When people look back at my legacy, I want them to see more than a transaction line or a box score. I was part of an era where the game was still finding its shape, and I kept showing up inside that change. The meaning is in the persistence: the college years, the pro years, the championships, and the proof that the work held.",
+  ];
+  return {
+    role: "assistant",
+    content: lines[beatIndex % lines.length],
+    moment: moment || moments[beatIndex % Math.max(moments.length, 1)],
+    media: beat.media,
+  };
+};
+
+const buildWaltNarratorMessage = (athlete, beatIndex) => {
+  const beat = narratorBeats[beatIndex % narratorBeats.length];
+  const moments = athlete?.moments || [];
+  const moment = beat.getMoment(athlete);
+  const lines = [
+    "I am Walt Taylor, also known as Walt Liquor. My breakthrough came in December 2020, when I got my first shot at music supervising a major television production. I had not done it before, but I stepped into the room like I belonged there. That first chance forced me to trust my ear, my instincts, and the sound I was bringing with me.",
+    "The turning point was learning how to turn pressure into taste. A producer heard something in my choices and gave me room to fix mistakes before they became visible. That room mattered. It let me shape the music around the show instead of just filling space, and it taught me that an unconventional sound can become the thing that makes a project breathe.",
+    "When people talk about my story, I want them to understand that it was not built from a perfect plan. It was built from a chance, a little nerve, and the willingness to make the sound work under pressure. All The Queen's Men became the proof point, but the real legacy is the lesson: sometimes you grow into the job by taking it seriously before anyone is sure you can do it.",
+  ];
+  return {
+    role: "assistant",
+    content: lines[beatIndex % lines.length],
+    moment: moment || moments[beatIndex % Math.max(moments.length, 1)],
+    media: beat.media,
+  };
+};
+
 const buildNarratorMessage = (athlete, beatIndex) => {
   if (isDavidWest(athlete)) return buildDavidNarratorMessage(athlete, beatIndex);
+  if (isTomHoover(athlete)) return buildTomNarratorMessage(athlete, beatIndex);
+  if (isWaltLiquor(athlete)) return buildWaltNarratorMessage(athlete, beatIndex);
   const beat = narratorBeats[beatIndex % narratorBeats.length];
   const moment = beat.getMoment(athlete);
   return {
     role: "assistant",
     content: beat.line(athlete),
-    moment,
-    media: beat.media,
-  };
-};
-
-const cleanNarratorFallbackMessage = (athlete, beatIndex) => {
-  const beat = narratorBeats[beatIndex % narratorBeats.length];
-  const moment = beat.getMoment(athlete);
-  const name = athlete?.name || "I";
-  const first = athlete?.moments?.[0] || moment;
-  const signature = signatureMoment(athlete);
-  const final = athlete?.moments?.[athlete.moments.length - 1] || signature;
-  const statSummary = statLine(athlete);
-  const role = athlete?.cat === "music"
-    ? athlete?.genreLabel || "music"
-    : athlete?.position || "the work";
-
-  const lines = [
-    `I am ${name}. My story starts with ${first.y}: ${first.title}. That was the first clear signal of the work I was stepping into, and it shaped how I carried myself from there.`,
-    `The turning point I keep coming back to is ${signature.y}: ${signature.title}. It was not just a line in the record. It was a moment where I had to prove what my ${role} meant under real pressure.`,
-    `When people look back, I want them to understand the whole arc: ${statSummary}. The facts matter, but the meaning lives in moments like ${final.y}: ${final.title}. That is the part I want people to hear.`,
-  ];
-
-  return {
-    role: "assistant",
-    content: lines[beatIndex % lines.length],
     moment,
     media: beat.media,
   };
@@ -297,37 +304,6 @@ function writeNarratorCache(cache) {
   }
 }
 
-function readNarratorScriptCache() {
-  try {
-    const raw = window.localStorage.getItem(NARRATOR_SCRIPT_CACHE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return {};
-    return parsed;
-  } catch {
-    return {};
-  }
-}
-
-function writeNarratorScriptCache(cache) {
-  try {
-    window.localStorage.setItem(NARRATOR_SCRIPT_CACHE_KEY, JSON.stringify(cache));
-  } catch {
-    // best-effort cache only
-  }
-}
-
-function narratorScriptCacheId(athlete, beatIndex) {
-  const profilePart = btoa(unescape(encodeURIComponent(JSON.stringify({
-    id: athlete?.id || "",
-    name: athlete?.name || "",
-    years: athlete?.years || "",
-    moments: athlete?.moments || [],
-    stats: athlete?.stats || [],
-  })))).slice(0, 96);
-  return `${clean(athlete?.name || "").trim()}::${beatIndex}::${profilePart}`;
-}
-
 function base64ToAudioUrl(audioBase64) {
   const bytes = Uint8Array.from(atob(audioBase64), (ch) => ch.charCodeAt(0));
   const blob = new Blob([bytes], { type: "audio/mp3" });
@@ -339,7 +315,7 @@ export const OPENING_NARRATIVE_PROMPT = "Begin the story of your career from the
 export const prewarmOpeningNarrative = async (athlete) => {
   await wait(650);
   return {
-    ...(isAiNarratorAthlete(athlete) ? cleanNarratorFallbackMessage(athlete, 0) : buildNarratorMessage(athlete, 0)),
+    ...buildNarratorMessage(athlete, 0),
     prompt: OPENING_NARRATIVE_PROMPT,
     prewarmed: true,
   };
@@ -511,43 +487,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   };
 
   const generateNarratorMessage = async (beatIndex) => {
-    const fallback = isAiNarratorAthlete(athlete)
-      ? cleanNarratorFallbackMessage(athlete, beatIndex)
-      : buildNarratorMessage(athlete, beatIndex);
-    if (!isAiNarratorAthlete(athlete)) return fallback;
-    const scriptCacheKey = narratorScriptCacheId(athlete, beatIndex);
-    const scriptCache = readNarratorScriptCache();
-    const cachedText = scriptCache[scriptCacheKey]?.text;
-    if (cachedText) {
-      return {
-        ...fallback,
-        content: cachedText,
-      };
-    }
-    try {
-      const response = await fetch(`${API_BASE.replace(/\/$/, "")}/api/twin/generate-narrator`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ beat_index: beatIndex, profile: athlete }),
-      });
-      if (!response.ok) return fallback;
-      const payload = await response.json();
-      const text = (payload.text || "").trim();
-      if (!text) return fallback;
-      const name = athlete?.name || "";
-      if (name && new RegExp(`\\b${escapeRegExp(name)}\\b`).test(text.replace(/^I am [^.]+\./, ""))) return fallback;
-      scriptCache[scriptCacheKey] = {
-        text,
-        generatedAtISO: new Date().toISOString(),
-      };
-      writeNarratorScriptCache(scriptCache);
-      return {
-        ...fallback,
-        content: text,
-      };
-    } catch {
-      return fallback;
-    }
+    return buildNarratorMessage(athlete, beatIndex);
   };
 
   const synthesizeNarratorAudioToCache = async (beatIndex, text) => {
@@ -899,7 +839,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     await preGenerateNarratorVoices(beats);
     if (!isMediaSessionActive(session)) return;
     setMessages(beats.map((beat, index) => (
-      index === 0 && prewarmedNarrative && !isAiNarratorAthlete(athlete)
+      index === 0 && prewarmedNarrative
         ? { ...beat, prewarmed: true }
         : beat
     )));
