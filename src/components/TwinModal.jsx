@@ -365,7 +365,21 @@ export const prewarmOpeningNarrative = async (athlete) => {
 };
 
 export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewarmedNarrative }) {
-  const [messages, setMessages] = useState([]);
+  const figmaTwinMode = new URLSearchParams(window.location.search).get("figmaTwin");
+  const initialMessages = () => {
+    if (figmaTwinMode === "narrator") {
+      return narratorBeats.map((_, index) => buildNarratorMessage(athlete, index));
+    }
+    if (figmaTwinMode === "qaThread") return qaCaptureMessages(athlete);
+    if (mode === "narrator") {
+      return narratorBeats.map((_, index) => {
+        const beat = buildNarratorMessage(athlete, index);
+        return index === 0 && prewarmedNarrative ? { ...beat, prewarmed: true } : beat;
+      });
+    }
+    return [];
+  };
+  const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeBeat, setActiveBeat] = useState(0);
@@ -398,7 +412,6 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   const onCloseRef = useRef(onClose);
   const titleId = useId();
   const descriptionId = useId();
-  const figmaTwinMode = new URLSearchParams(window.location.search).get("figmaTwin");
 
   // ── Web Audio API for streaming PCM16 chunks ─────────────────────
   const initAudioCtx = () => {
@@ -830,27 +843,6 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     void run();
   };
 
-  const triggerNarrator = async () => {
-    const session = currentMediaSession();
-    stopVoicePlayback();
-    if (!isMediaSessionActive(session)) return;
-    narratorIndex.current = 0;
-    setActiveBeat(0);
-    const beats = await Promise.all(
-      narratorBeats.map((_, index) => generateNarratorMessage(index))
-    );
-    if (!isMediaSessionActive(session)) return;
-    setMessages(beats.map((beat, index) => (
-      index === 0 && prewarmedNarrative
-        ? { ...beat, prewarmed: true }
-        : beat
-    )));
-    setLoading(false);
-    pendingNarratorBeatRef.current = 0;
-    pendingNarratorAutoplayRef.current = true;
-    void preGenerateNarratorVoices(beats);
-  };
-
   const continueNarrator = async () => {
     const session = currentMediaSession();
     stopVoicePlayback();
@@ -1003,7 +995,10 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     const session = currentMediaSession();
     pendingNarratorAutoplayRef.current = false;
     modeRef.current = m;
-    setMessages([]);
+    const narratorMessages = m === "narrator"
+      ? narratorBeats.map((_, index) => buildNarratorMessage(athlete, index))
+      : [];
+    setMessages(narratorMessages);
     setVoiceState("idle");
     setVoiceSessionActive(false);
     setLoading(false);
@@ -1011,7 +1006,11 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     switchModeTimerRef.current = window.setTimeout(() => {
       switchModeTimerRef.current = null;
       if (!isMediaSessionActive(session)) return;
-      if (m === "narrator") triggerNarrator();
+      if (m === "narrator") {
+        pendingNarratorBeatRef.current = 0;
+        pendingNarratorAutoplayRef.current = true;
+        void preGenerateNarratorVoices(narratorMessages);
+      }
       if (m === "qa") openRealtimeWS();
     }, 50);
   };
@@ -1029,14 +1028,18 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     if (figmaTwinMode === "narrator") {
       narratorIndex.current = narratorBeats.length - 1;
       setActiveBeat(narratorBeats.length - 1);
-      setMessages(narratorBeats.map((_, index) => buildNarratorMessage(athlete, index)));
       return;
     }
     if (figmaTwinMode === "qaThread") {
-      setMessages(qaCaptureMessages(athlete));
       return;
     }
-    if (mode === "narrator") triggerNarrator();
+    if (mode === "narrator") {
+      pendingNarratorBeatRef.current = 0;
+      pendingNarratorAutoplayRef.current = true;
+      void preGenerateNarratorVoices(messages.length > 0
+        ? messages
+        : narratorBeats.map((_, index) => buildNarratorMessage(athlete, index)));
+    }
     if (mode === "qa") {
       // Pre-warm: open WS so session is ready before user asks
       openRealtimeWS();
