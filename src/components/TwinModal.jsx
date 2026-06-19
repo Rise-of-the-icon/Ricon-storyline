@@ -5,7 +5,8 @@ const WS_BASE  = (import.meta.env.VITE_TWIN_API_URL || "https://ricon-storyline-
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const STREAM_ERROR_MESSAGE = "This moment is unavailable from the verified archive. Try a different question.";
-const NARRATOR_VOICE_CACHE_KEY = "ricon:narrator-voice-cache:v4";
+const NARRATOR_VOICE_CACHE_KEY = "ricon:narrator-voice-cache:v5";
+const NARRATOR_SCRIPT_CACHE_KEY = "ricon:narrator-script-cache:v1";
 const NARRATOR_MODEL_ID = "inworld-tts-2";
 
 const NARRATOR_VOICE_ID_BY_MERGE_KEY = {
@@ -245,6 +246,37 @@ function writeNarratorCache(cache) {
   }
 }
 
+function readNarratorScriptCache() {
+  try {
+    const raw = window.localStorage.getItem(NARRATOR_SCRIPT_CACHE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function writeNarratorScriptCache(cache) {
+  try {
+    window.localStorage.setItem(NARRATOR_SCRIPT_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // best-effort cache only
+  }
+}
+
+function narratorScriptCacheId(athlete, beatIndex) {
+  const profilePart = btoa(unescape(encodeURIComponent(JSON.stringify({
+    id: athlete?.id || "",
+    name: athlete?.name || "",
+    years: athlete?.years || "",
+    moments: athlete?.moments || [],
+    stats: athlete?.stats || [],
+  })))).slice(0, 96);
+  return `${clean(athlete?.name || "").trim()}::${beatIndex}::${profilePart}`;
+}
+
 function base64ToAudioUrl(audioBase64) {
   const bytes = Uint8Array.from(atob(audioBase64), (ch) => ch.charCodeAt(0));
   const blob = new Blob([bytes], { type: "audio/mp3" });
@@ -327,13 +359,20 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     nextPlayRef.current = 0;
   };
 
-  const playAudioBase64 = (audioBase64) => {
-    if (!audioBase64) return false;
+  const stopVoicePlayback = () => {
     if (audioRef.current) {
       audioRef.current.pause?.();
       audioRef.current.currentTime = 0;
       audioRef.current = null;
     }
+    stopStreamingAudio();
+    setVoiceState("idle");
+    setVoiceSessionActive(false);
+  };
+
+  const playAudioBase64 = (audioBase64) => {
+    if (!audioBase64) return false;
+    stopVoicePlayback();
     const src = base64ToAudioUrl(audioBase64);
     const audio = new Audio(src);
     audioRef.current = audio;
@@ -391,6 +430,42 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
       };
     } catch {
       return null;
+    }
+  };
+
+  const generateNarratorMessage = async (beatIndex) => {
+    const fallback = buildNarratorMessage(athlete, beatIndex);
+    if (!isStudioAnthropicQaAthlete(athlete)) return fallback;
+    const scriptCacheKey = narratorScriptCacheId(athlete, beatIndex);
+    const scriptCache = readNarratorScriptCache();
+    const cachedText = scriptCache[scriptCacheKey]?.text;
+    if (cachedText) {
+      return {
+        ...fallback,
+        content: cachedText,
+      };
+    }
+    try {
+      const response = await fetch(`${API_BASE.replace(/\/$/, "")}/api/twin/generate-narrator`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ beat_index: beatIndex, profile: athlete }),
+      });
+      if (!response.ok) return fallback;
+      const payload = await response.json();
+      const text = (payload.text || "").trim();
+      if (!text) return fallback;
+      scriptCache[scriptCacheKey] = {
+        text,
+        generatedAtISO: new Date().toISOString(),
+      };
+      writeNarratorScriptCache(scriptCache);
+      return {
+        ...fallback,
+        content: text,
+      };
+    } catch {
+      return fallback;
     }
   };
 
@@ -605,15 +680,12 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     };
   }, []);
 
-  const playNarratorAudio = (beatIndex) => {
+  const playNarratorAudio = (beatIndex, textOverride = "") => {
     const run = async () => {
       try {
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current = null;
-        }
+        stopVoicePlayback();
         const beat = messages[beatIndex];
-        const text = beat?.content || buildNarratorMessage(athlete, beatIndex).content;
+        const text = textOverride || beat?.content || buildNarratorMessage(athlete, beatIndex).content;
         const voiceId = narratorVoiceIdForAthlete(athlete);
         const cacheKey = narratorCacheId({
           athleteName: athlete.name,
@@ -702,6 +774,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   };
 
   const triggerNarrator = async () => {
+    stopVoicePlayback();
     if (prewarmedNarrative) {
       setLoading(false);
       narratorIndex.current = 0;
@@ -716,7 +789,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     narratorIndex.current = 0;
     setActiveBeat(0);
     await wait(650);
-    const firstBeat = buildNarratorMessage(athlete, 0);
+    const firstBeat = await generateNarratorMessage(0);
     setMessages([firstBeat]);
     setLoading(false);
     pendingNarratorBeatRef.current = 0;
@@ -724,22 +797,24 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
   };
 
   const continueNarrator = async () => {
+    stopVoicePlayback();
     setLoading(true);
     await wait(620);
     const nextIndex = narratorIndex.current >= narratorBeats.length - 1 ? 0 : narratorIndex.current + 1;
     narratorIndex.current = nextIndex;
     setActiveBeat(nextIndex);
-    const nextBeat = buildNarratorMessage(athlete, nextIndex);
+    const nextBeat = await generateNarratorMessage(nextIndex);
     setMessages(p => {
       if (p[nextIndex]) return p;
       return [...p, nextBeat];
     });
     setLoading(false);
-    playNarratorAudio(nextIndex);
+    playNarratorAudio(nextIndex, nextBeat.content);
   };
 
   const selectNarratorBeat = async (index) => {
     if (loading) return;
+    stopVoicePlayback();
     setActiveBeat(index);
     narratorIndex.current = index;
     if (messages[index]) {
@@ -749,17 +824,19 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     setLoading(true);
     await wait(420);
     narratorIndex.current = Math.max(narratorIndex.current, index);
-    let targetBeat = null;
+    const generatedBeats = await Promise.all(
+      Array.from({ length: index + 1 }, (_, i) => messages[i] || generateNarratorMessage(i))
+    );
+    let targetBeat = generatedBeats[index] || null;
     setMessages(p => {
       const next = [...p];
       for (let i = 0; i <= index; i += 1) {
-        if (!next[i]) next[i] = buildNarratorMessage(athlete, i);
+        if (!next[i]) next[i] = generatedBeats[i];
       }
-      targetBeat = next[index];
       return next;
     });
     setLoading(false);
-    if (targetBeat) playNarratorAudio(index);
+    if (targetBeat) playNarratorAudio(index, targetBeat.content);
   };
 
   const sendQA = (questionOverride) => {
@@ -769,8 +846,8 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     setMessages(p => [...p, { role: "user", content: question }]);
     setInput("");
     setLoading(true);
+    stopVoicePlayback();
     setVoiceState("thinking");
-    stopStreamingAudio();
 
     const assistantIndex = messages.length + 1;
     currentMsgRef.current = { index: null, buffer: "", audioStarted: false, question: null };
@@ -797,9 +874,7 @@ export default function TwinModal({ athlete, mode, onClose, onSwitchMode, prewar
     if (loading || voiceState === "listening" || voiceState === "thinking") return;
 
     if (voiceState === "speaking") {
-      audioRef.current?.pause?.();
-      setVoiceState("idle");
-      setVoiceSessionActive(false);
+      stopVoicePlayback();
       return;
     }
 

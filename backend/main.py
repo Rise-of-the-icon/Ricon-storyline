@@ -333,7 +333,7 @@ def synthesize_audio(text: str, instruct: str = "") -> bytes:
         raise HTTPException(500, f"TTS failed: {resp.status_code} {resp.text}")
     return base64.b64decode(resp.json()["audioContent"])
 
-def generate_openai_text(question: str, system_prompt: str) -> str:
+def generate_openai_text(question: str, system_prompt: str, max_tokens: int = 160) -> str:
     if not OPENAI_API_KEY:
         raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured")
 
@@ -345,7 +345,7 @@ def generate_openai_text(question: str, system_prompt: str) -> str:
         },
         json={
             "model": OPENAI_TEXT_MODEL,
-            "max_tokens": 160,
+            "max_tokens": max_tokens,
             "temperature": 0.7,
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -397,6 +397,29 @@ Answer strictly in first person as {name}. Sound like a thoughtful person speaki
 Use the profile details below only as grounding. Do not mention "profile", "database", "verified record", "provided data", or "archive".
 Do not list stats mechanically unless the question asks for stats. For legacy questions, talk about values, choices, work, influence, and what the career meant.
 Keep the answer concise, conversational, and audio-friendly: 2-3 sentences.
+
+Profile grounding:
+{json.dumps(compact, ensure_ascii=False)}
+""".strip()
+
+def build_profile_narrator_prompt(profile: dict[str, Any], beat_index: int) -> str:
+    compact = compact_qa_profile(profile)
+    name = compact.get("name") or "this person"
+    chapter_labels = [
+        "origins and first breakthrough",
+        "turning point and rise",
+        "legacy and lasting meaning",
+    ]
+    chapter = chapter_labels[beat_index % len(chapter_labels)]
+    return f"""
+You are writing a RICON narrator chapter spoken strictly in first person as {name}.
+
+Write one concise audio-friendly paragraph for the chapter: {chapter}.
+Use only the grounded profile details below, which come from verified Studio data such as Wikipedia, BDL, and reviewed custom moments.
+Do not mention "profile", "database", "verified record", "Wikipedia", "BDL", "Studio", or "archive".
+Do not use third person for {name}. Use "I", "my", and "me" throughout.
+Do not say "I am {name}" unless this is chapter 0. If chapter 0, start exactly with "I am {name}."
+Keep it natural and biographical, not a list of facts. 85-120 words.
 
 Profile grounding:
 {json.dumps(compact, ensure_ascii=False)}
@@ -624,6 +647,10 @@ class ProfileAskRequest(BaseModel):
 class ProfileAskResponse(BaseModel):
     text: str
 
+class ProfileNarratorRequest(BaseModel):
+    beat_index: int
+    profile: dict[str, Any]
+
 @app.post("/twin/ask", response_model=AskResponse)
 async def ask(req: AskRequest):
     text = generate_openai_text(req.question, DAVID_REALTIME_PROMPT)
@@ -636,6 +663,15 @@ async def generate_profile_answer(req: ProfileAskRequest):
     if not question:
         raise HTTPException(status_code=400, detail="Question is required")
     text = generate_openai_text(question, build_profile_qa_prompt(req.profile))
+    return ProfileAskResponse(text=text)
+
+@app.post("/api/twin/generate-narrator", response_model=ProfileAskResponse)
+async def generate_profile_narrator(req: ProfileNarratorRequest):
+    text = generate_openai_text(
+        f"Write narrator chapter {req.beat_index}.",
+        build_profile_narrator_prompt(req.profile, req.beat_index),
+        max_tokens=220,
+    )
     return ProfileAskResponse(text=text)
 
 # ── WebSocket Q&A ─────────────────────────────────────────────────────────────
