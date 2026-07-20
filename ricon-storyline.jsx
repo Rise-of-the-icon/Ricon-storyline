@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import CSS from "./src/styles";
 import HomeScreen from "./src/components/HomeScreen";
-import AthleteScreen from "./src/components/AthleteScreen";
 import TwinModal, { prewarmOpeningNarrative } from "./src/components/TwinModal";
 import { LEGENDS } from "./src/data/athletes";
 
@@ -10,8 +9,9 @@ export default function RICONStoryline() {
   const figmaAthlete = figmaTwinMode ? LEGENDS.find(a => a.id === "jordan") : null;
   const [screen, setScreen] = useState(figmaAthlete ? "athlete" : "home");
   const [athlete, setAthlete] = useState(figmaAthlete);
-  const [twinOpen, setTwinOpen] = useState(Boolean(figmaTwinMode));
-  const [twinMode, setTwinMode] = useState(figmaTwinMode || "narrator");
+  const [twinMode, setTwinMode] = useState(
+    figmaTwinMode === "qaThread" ? "qa" : (figmaTwinMode || "narrator")
+  );
   const [prewarmedNarrative, setPrewarmedNarrative] = useState(null);
   const [transitionPhase, setTransitionPhase] = useState("entered");
   const [leavingPage, setLeavingPage] = useState(null);
@@ -36,14 +36,14 @@ export default function RICONStoryline() {
   };
   const openAthlete = (a) => {
     setPrewarmedNarrative(prewarmCache.current.get(a.id) || null);
+    setTwinMode("narrator");
     startScreenTransition("athlete", a);
   };
   const goHome = () => {
     setPrewarmedNarrative(null);
-    setTwinOpen(false);
+    setTwinMode("narrator");
     startScreenTransition("home");
   };
-  const openTwin = (mode) => { setTwinMode(mode); setTwinOpen(true); };
 
   useEffect(() => {
     if (screen !== "athlete" || !athlete) return undefined;
@@ -76,11 +76,20 @@ export default function RICONStoryline() {
     }
 
     if (pageScreen === "athlete" && pageAthlete) {
+      // Avoid mounting a second twin engine during page-exit transitions.
+      if (isLeaving) {
+        return <div className="twin-details-page twin-details-leaving" aria-hidden="true" />;
+      }
+
       return (
-        <AthleteScreen
+        <TwinModal
+          key={pageAthlete.id}
+          presentation="page"
           athlete={pageAthlete}
-          onBack={isLeaving ? () => {} : goHome}
-          onTwin={isLeaving ? () => {} : openTwin}
+          mode={twinMode}
+          prewarmedNarrative={twinMode === "narrator" ? prewarmedNarrative : null}
+          onClose={goHome}
+          onSwitchMode={(m) => setTwinMode(m)}
         />
       );
     }
@@ -110,16 +119,6 @@ export default function RICONStoryline() {
             {renderPage(screen, athlete)}
           </div>
         </div>
-        {twinOpen && athlete && (
-          <TwinModal
-            key={athlete.id}
-            athlete={athlete}
-            mode={twinMode}
-            prewarmedNarrative={twinMode === "narrator" ? prewarmedNarrative : null}
-            onClose={() => setTwinOpen(false)}
-            onSwitchMode={(m) => setTwinMode(m)}
-          />
-        )}
       </div>
     </>
   );

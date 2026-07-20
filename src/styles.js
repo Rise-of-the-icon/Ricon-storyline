@@ -59,17 +59,19 @@ const CSS = `
   @keyframes streamCursor { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
   @keyframes premiumGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(201, 165, 77, 0); } 50% { box-shadow: 0 0 28px 6px rgba(201, 165, 77, 0.18); } }
 
-  .ricon-root { min-height: 100vh; overflow-x: hidden; background: radial-gradient(circle at 15% 0%, rgba(124, 108, 255, 0.18), transparent 34%), radial-gradient(circle at 88% 12%, rgba(96, 165, 250, 0.16), transparent 30%), var(--background); color: var(--foreground); font-family: var(--font-sans); }
+  .ricon-root { min-height: 100vh; overflow-x: clip; background: radial-gradient(circle at 15% 0%, rgba(124, 108, 255, 0.18), transparent 34%), radial-gradient(circle at 88% 12%, rgba(96, 165, 250, 0.16), transparent 30%), var(--background); color: var(--foreground); font-family: var(--font-sans); }
   .bebas, .cormorant, .mono { font-family: var(--font-sans); }
   .mono { font-family: var(--font-mono); }
   .premium-text { color: var(--premium); }
   .brand-gradient-text { background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 58%, var(--premium) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .page-transition-stage { position: relative; min-height: 100vh; }
-  .page-transition-layer { width: 100%; opacity: 1; transform: translateY(0); }
-  .page-transition-exit { position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: 1; transform: translateY(0); transition: opacity 0.2s ease; }
+  /* Resting layers must use transform:none — any transform (even translateY(0))
+     creates a containing block and breaks position:sticky on the narrator timeline. */
+  .page-transition-layer { width: 100%; opacity: 1; transform: none; }
+  .page-transition-exit { position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: 1; transform: none; transition: opacity 0.2s ease; }
   .page-transition-exit.is-leaving { opacity: 0; }
   .page-transition-entering { opacity: 0; transform: translateY(8px); }
-  .page-transition-entered { opacity: 1; transform: translateY(0); transition: opacity 0.3s ease, transform 0.3s ease; }
+  .page-transition-entered { opacity: 1; transform: none; transition: opacity 0.3s ease, transform 0.3s ease; }
   .cta-glow { animation: premiumGlow 3s ease-in-out infinite; }
   .ring-a { animation: ringA 2.4s ease-in-out infinite; }
   .ring-b { animation: ringB 3s ease-in-out infinite; }
@@ -232,6 +234,25 @@ const CSS = `
   .rail-stats { width: 100%; border-top: 1px solid var(--border); padding-top: 20px; }
   .rail-stat { margin-bottom: 14px; }
   .modal-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .twin-facelift-main { padding: 0; overflow: hidden; }
+  .twin-facelift-header .nav-spacer { flex: 1; }
+  .twin-details-page {
+    position: relative;
+    inset: auto;
+    z-index: 1;
+    min-height: 100vh;
+    height: auto;
+    max-height: none;
+    backdrop-filter: none;
+    animation: none;
+  }
+  .twin-details-page .twin-facelift-main {
+    min-height: calc(100vh - 76px);
+  }
+  .twin-details-leaving {
+    min-height: 100vh;
+    background: #080810;
+  }
   .messages { flex: 1; overflow-y: auto; padding: 36px 40px; }
   .empty-state { text-align: center; padding-top: 80px; }
   .empty-title { margin-bottom: 12px; color: var(--muted-foreground); font-size: 1.25rem; }
