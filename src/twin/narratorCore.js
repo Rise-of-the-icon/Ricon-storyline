@@ -4,6 +4,8 @@ export const WS_BASE = (import.meta.env.VITE_TWIN_API_URL || "https://ricon-stor
 
 export const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 export const STREAM_ERROR_MESSAGE = "This moment is unavailable from the verified archive. Try a different question.";
+export const TWIN_SERVICE_UNAVAILABLE_MESSAGE =
+  "Twin service is unavailable. Start the backend or check VITE_TWIN_API_URL.";
 export const NARRATOR_VOICE_CACHE_KEY = "ricon:narrator-voice-cache:v6";
 export const NARRATOR_MODEL_ID = "inworld-tts-2";
 export const RESEARCH_VOICE_CACHE_VERSION = 1;
@@ -12,10 +14,14 @@ export const NARRATOR_VOICE_ID_BY_MERGE_KEY = {
   "david west": "default--z5zasdfwci5ofrt-gmsjw__test",
   "tom hoover": "default--z5zasdfwci5ofrt-gmsjw__tom_hoover",
   "walt liquor": "default--z5zasdfwci5ofrt-gmsjw__walt",
+  "walt taylor": "default--z5zasdfwci5ofrt-gmsjw__walt",
   "walt taylor aka walt liquor": "default--z5zasdfwci5ofrt-gmsjw__walt",
 };
 
 export const NARRATOR_VOICE_ID_BY_TWIN_ID = {
+  west_d: "default--z5zasdfwci5ofrt-gmsjw__test",
+  hoover_t: "default--z5zasdfwci5ofrt-gmsjw__tom_hoover",
+  liquor_w: "default--z5zasdfwci5ofrt-gmsjw__walt",
   "2aa2a157-7849-44a7-b695-f715c39d5bd7": "default--z5zasdfwci5ofrt-gmsjw__test",
   "c28f8898-da88-4887-b1e9-2d61396a91b9": "default--z5zasdfwci5ofrt-gmsjw__tom_hoover",
   "walt-liquor-research": "default--z5zasdfwci5ofrt-gmsjw__walt",
@@ -25,10 +31,35 @@ export const clean = (value) => value.toLowerCase().replace(/[^a-z0-9\s]/g, " ")
 export const STOP_WORDS = new Set(["what", "when", "where", "your", "were", "with", "that", "this", "from", "about", "moment"]);
 
 export const athleteKey = (athlete) => clean(`${athlete?.id || ""} ${athlete?.name || ""}`).replace(/\s+/g, " ").trim();
-export const isDavidWest = (athlete) => athleteKey(athlete).includes("west d") || athleteKey(athlete).includes("david west");
-export const isTomHoover = (athlete) => athleteKey(athlete).includes("tom hoover");
-export const isWaltLiquor = (athlete) => athleteKey(athlete).includes("walt liquor");
+export const isDavidWest = (athlete) =>
+  athlete?.id === "west_d" ||
+  athleteKey(athlete).includes("west d") ||
+  athleteKey(athlete).includes("david west");
+export const isTomHoover = (athlete) =>
+  athlete?.id === "hoover_t" ||
+  athlete?.id === "c28f8898-da88-4887-b1e9-2d61396a91b9" ||
+  athleteKey(athlete).includes("tom hoover");
+export const isWaltLiquor = (athlete) => {
+  const key = athleteKey(athlete);
+  return (
+    athlete?.id === "liquor_w" ||
+    athlete?.id === "walt-liquor-research" ||
+    key.includes("walt liquor") ||
+    key.includes("walt taylor")
+  );
+};
 
+export async function checkTwinApiHealth() {
+  try {
+    const response = await fetch(`${API_BASE.replace(/\/$/, "")}/health`, {
+      method: "GET",
+      cache: "no-store",
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
 export const signatureMoment = (athlete) => {
   return [...athlete.moments].reverse().find(moment => moment.type === "iconic" || moment.type === "championship")
     || athlete.moments[athlete.moments.length - 1];
@@ -108,12 +139,15 @@ export const narratorMomentBody = (athlete, moment) => {
 export const isStudioAnthropicQaAthlete = (athlete) => {
   const key = athleteKey(athlete);
   return athlete?.id === "west_d" ||
+    athlete?.id === "hoover_t" ||
+    athlete?.id === "liquor_w" ||
     athlete?.id === "2aa2a157-7849-44a7-b695-f715c39d5bd7" ||
     athlete?.id === "c28f8898-da88-4887-b1e9-2d61396a91b9" ||
     athlete?.id === "walt-liquor-research" ||
     key.includes("david west") ||
     key.includes("tom hoover") ||
-    key.includes("walt liquor");
+    key.includes("walt liquor") ||
+    key.includes("walt taylor");
 };
 
 export const narratorBeats = [
@@ -269,7 +303,9 @@ export function narratorVoiceIdForAthlete(athlete) {
   const byId = NARRATOR_VOICE_ID_BY_TWIN_ID[athlete?.id];
   if (byId) return byId;
   const key = clean(athlete?.name || "").replace(/\s+/g, " ").trim();
-  if (key.includes("walt liquor")) return NARRATOR_VOICE_ID_BY_MERGE_KEY["walt liquor"];
+  if (key.includes("walt liquor") || key.includes("walt taylor")) {
+    return NARRATOR_VOICE_ID_BY_MERGE_KEY["walt liquor"];
+  }
   if (key.includes("david west")) return NARRATOR_VOICE_ID_BY_MERGE_KEY["david west"];
   if (key.includes("tom hoover")) return NARRATOR_VOICE_ID_BY_MERGE_KEY["tom hoover"];
   return (
@@ -281,9 +317,15 @@ export function narratorVoiceIdForAthlete(athlete) {
 
 export function narratorStaticAudioUrl(athlete, beatIndex) {
   const key = athleteKey(athlete);
-  if (key.includes("david west")) return `/narrator-audio/david-west-${beatIndex}.mp3`;
-  if (key.includes("tom hoover")) return `/narrator-audio/tom-hoover-${beatIndex}.mp3`;
-  if (key.includes("walt liquor")) return `/narrator-audio/walt-liquor-${beatIndex}.mp3`;
+  if (key.includes("david west") || athlete?.id === "west_d") {
+    return `/narrator-audio/david-west-${beatIndex}.mp3`;
+  }
+  if (key.includes("tom hoover") || athlete?.id === "hoover_t") {
+    return `/narrator-audio/tom-hoover-${beatIndex}.mp3`;
+  }
+  if (key.includes("walt liquor") || key.includes("walt taylor") || athlete?.id === "liquor_w") {
+    return `/narrator-audio/walt-liquor-${beatIndex}.mp3`;
+  }
   return "";
 }
 

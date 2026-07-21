@@ -5,6 +5,8 @@ No pool, no fallback, no replenisher overhead.
 One Inworld session per browser WS. Reconnects transparently between questions.
 """
 
+from __future__ import annotations
+
 import os
 import re
 import json
@@ -14,6 +16,14 @@ import hashlib
 import asyncio
 import pathlib
 import uuid
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent / ".env")
+except ImportError:
+    pass
+
 import requests
 import websockets as ws_lib
 from websockets.protocol import State

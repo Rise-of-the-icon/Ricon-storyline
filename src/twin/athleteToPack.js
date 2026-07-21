@@ -19,15 +19,15 @@ function liveTrust(athlete) {
   };
 }
 
-function liveStatusCopy(displayName) {
+function liveStatusCopy() {
   return {
-    idle: "Ready from verified archive",
+    idle: "Ready",
     submitted: "Request received",
-    preparing: "Checking verified records",
-    streaming: "Speaking verified twin response",
+    preparing: "Checking records",
+    streaming: "Speaking",
     stopped: "Response stopped — partial answer preserved",
-    complete: "Verified twin response delivered",
-    uncertain: "Outside verified archive",
+    complete: "Response delivered",
+    uncertain: "Outside archive scope",
     failed: "Could not complete response",
   };
 }
@@ -95,13 +95,13 @@ function synthesizePackFromAthlete(athlete) {
     twin: {
       available: true,
       modes: ["narrator", "ask"],
-      askCtaLabel: `Ask ${displayName} a question`,
+      askCtaLabel: "Ask a question",
       narratorLabel: "Narrator",
       bannerTitle: "Digital Twin Available",
       bannerBody: `Interact with ${displayName}'s verified AI twin. Choose Narrator mode to relive the story, or Q&A mode to ask anything directly.`,
     },
     trust: liveTrust(athlete),
-    statusCopy: liveStatusCopy(displayName),
+    statusCopy: liveStatusCopy(),
     eras,
     chat: {
       responses: {},
@@ -124,15 +124,15 @@ function synthesizePackFromAthlete(athlete) {
       recovery: [],
     },
     copy: {
-      empty: "Ask from the verified archive. Every response draws from documented moments.",
+      empty: "Every response draws from documented moments in the timeline.",
       disclose: "Responses are generated from verified twin material with live voice.",
-      composerPlaceholder: "Ask from the verified archive",
+      composerPlaceholder: "Ask a question…",
       composerAriaLabel: `Ask ${displayName} a question`,
       tapeLabel: "Source tape",
-      footer: "Digital Twin · Verified Data",
+      footer: "",
       storyTrust: "Guided narrator uses verified voice chapters",
       timelineAriaLabel: `${displayName} career timeline`,
-      chatEyebrow: "Digital Twin · Q&A",
+      chatEyebrow: "",
       verifiedBadge: "Verified",
       outsideCue: "Outside the verified archive for this twin.",
       mediaProvenance: "Illustrative media placeholder until cleared assets are attached.",
@@ -157,7 +157,7 @@ export function athleteToPack(athlete) {
         ...liveTrust(athlete),
         sourceLabel: waltPack.trust.sourceLabel,
       },
-      statusCopy: liveStatusCopy(athlete.name),
+      statusCopy: liveStatusCopy(),
     });
   }
 

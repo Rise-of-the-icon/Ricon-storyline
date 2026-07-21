@@ -612,27 +612,24 @@ button.wt-voice:hover{background:rgba(74,144,217,.16);}
 
 /* ── TALENT NAME (in story entry) ── */
 .wt-talent-name{font-family:var(--disp);font-size:clamp(42px,8vw,72px);line-height:.95;letter-spacing:.02em;margin:0 0 28px;color:var(--bone);text-transform:uppercase;}
-.wt-ask-entry .wt-talent-name{margin-bottom:14px;}
 
-/* ── STORY ENTRY (narrator/ask doorway under sticky mode switch) ── */
+/* ── STORY ENTRY (narrator doorway under sticky mode switch) ── */
 .wt-story-entry{position:relative;border-top:0;}
 .wt-twin-switch{
-  position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 20px;
+  position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:12px 20px;
   width:100%;box-sizing:border-box;
   padding:14px max(24px,calc((100% - 1036px) / 2 + 24px));
   background:linear-gradient(180deg,rgba(8,8,16,.98),rgba(8,8,16,.94));
   border-top:1px solid var(--line);border-bottom:1px solid var(--line);backdrop-filter:blur(12px);
 }
-.wt-twin-switch-status{margin:0;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--smoke);}
-.wt-twin-switch-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-left:auto;}
+.wt-twin-switch-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
 .wt-mode-btn{display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:8px;padding:11px 16px;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;background:transparent;color:var(--smoke);transition:background .15s ease,border-color .15s ease,color .15s ease;}
 .wt-mode-btn:hover{color:var(--bone);background:rgba(123,200,232,.08);}
 .wt-mode-btn:focus-visible{outline:2px solid var(--blue-lt);outline-offset:2px;}
 .wt-mode-btn.active{background:rgba(74,144,217,.28);border-color:rgba(123,200,232,.5);color:var(--bone);}
 .wt-mode-btn.ask-cta{color:var(--gold-soft);}
 .wt-mode-btn.ask-cta.active{background:rgba(201,168,76,.18);border-color:rgba(201,168,76,.45);color:var(--gold-soft);}
-.wt-ask-entry{padding:20px 0 12px;border-bottom:1px solid var(--line);}
-.wt-ask-entry-cue{margin:0;max-width:42ch;font-family:var(--evoc);font-size:clamp(18px,2.2vw,22px);line-height:1.4;color:var(--bone-dim);}
+.wt-ask-panel .wt-wrap{padding-top:28px;}
 
 .wt-timeline-kicker{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--blue-lt);margin:28px 0 0;padding:0 24px;max-width:1036px;margin-left:auto;margin-right:auto;}
 
@@ -646,7 +643,7 @@ button.wt-voice:hover{background:rgba(74,144,217,.16);}
 .wt-mode-narrator .wt-ask-panel{ /* keep ask accessible via jump but visually secondary when in narrator - we use hidden attr instead */ }
 
 @media (max-width:820px){
-  .wt-twin-switch{align-items:flex-start;flex-direction:column;}
+  .wt-twin-switch{justify-content:flex-start;}
   .wt-hook{padding:20px 0 72px;}
   .wt-hook-media{opacity:.4;}
 }

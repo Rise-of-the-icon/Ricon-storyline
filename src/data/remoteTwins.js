@@ -1,6 +1,7 @@
 const TWIN_DATA_API_BASE =
   import.meta.env.VITE_TWIN_DATA_API_URL ||
   import.meta.env.VITE_STORYLINE_DATA_API_URL ||
+  import.meta.env.VITE_TWIN_API_URL ||
   "https://ricon-storyline-production.up.railway.app";
 
 function normalizeWhitespace(value = "") {
@@ -17,7 +18,7 @@ export function buildLegendMergeKey(name = "") {
     .replace(/\b(jr|sr|ii|iii|iv)\b/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  if (cleaned.includes("walt liquor")) return "walt liquor";
+  if (cleaned.includes("walt liquor") || cleaned.includes("walt taylor")) return "walt liquor";
   if (cleaned.includes("david west")) return "david west";
   if (cleaned.includes("tom hoover")) return "tom hoover";
   return cleaned;
@@ -28,7 +29,7 @@ function inferLegendCategory(twin) {
   const summary = `${twin?.wikipedia?.summary || ""}`.toLowerCase();
   const description = `${twin?.wikipedia?.description || ""}`.toLowerCase();
   const haystack = `${name} ${summary} ${description}`;
-  if (name.includes("walt liquor")) {
+  if (name.includes("walt liquor") || name.includes("walt taylor")) {
     return {
       cat: "music",
       genre: "music",

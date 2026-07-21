@@ -43,7 +43,7 @@ export function normalizeTalentPack(pack) {
     twin: {
       available: pack.twin?.available !== false,
       modes: pack.twin?.modes?.length ? pack.twin.modes : ["narrator", "ask"],
-      askCtaLabel: pack.twin?.askCtaLabel || `Ask ${pack.displayName} a question`,
+      askCtaLabel: pack.twin?.askCtaLabel || "Ask a question",
       narratorLabel: pack.twin?.narratorLabel || "Narrator",
       bannerTitle: pack.twin?.bannerTitle || "Digital Twin Available",
       bannerBody:

@@ -2,9 +2,11 @@ node_modules/
 dist/
 .env
 .env.local
+backend/.env
 .DS_Store
 models/
 __pycache__/
 *.pyc
 .Rhistory
 backend/static/research_voice/
+backend/.venv/

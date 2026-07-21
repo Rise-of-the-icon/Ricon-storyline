@@ -1,6 +1,6 @@
 import { useState, useEffect, useId, useRef } from "react";
 import {
-  wait, STREAM_ERROR_MESSAGE, narratorBeats, buildNarratorMessage, answerQuestion,
+  wait, STREAM_ERROR_MESSAGE, TWIN_SERVICE_UNAVAILABLE_MESSAGE, narratorBeats, buildNarratorMessage, answerQuestion,
   qaCaptureMessages, voicePrompts, narratorVoiceIdForAthlete, narratorStaticAudioUrl,
   narratorCacheId, researchVoiceCacheKey, researchVoiceCacheUrl, readNarratorCache,
   synthesizeNarratorAudioToCacheForAthlete, base64ToAudioUrl, buildNarratorMessages,
@@ -295,20 +295,20 @@ export default function useTwinEngine({ athlete, mode, onClose, onSwitchMode, pr
   };
 
   const generateProfileQaAnswer = async (question) => {
-    if (!isStudioAnthropicQaAthlete(athlete)) return null;
+    if (!isStudioAnthropicQaAthlete(athlete)) return { text: null, unavailable: false };
     try {
       const response = await fetch(`${API_BASE.replace(/\/$/, "")}/api/twin/generate-answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question, profile: athlete }),
       });
-      if (!response.ok) return null;
+      if (!response.ok) return { text: null, unavailable: true };
       const payload = await response.json();
-      return {
-        text: payload.text || "",
-      };
+      const text = payload.text || "";
+      if (!text) return { text: null, unavailable: true };
+      return { text, unavailable: false };
     } catch {
-      return null;
+      return { text: null, unavailable: true };
     }
   };
 
@@ -336,6 +336,33 @@ export default function useTwinEngine({ athlete, mode, onClose, onSwitchMode, pr
         if (!voiceConversationRef.current) setVoiceSessionActive(false);
         return;
       }
+
+      const isCoreTwin = isStudioAnthropicQaAthlete(athlete);
+      if (isCoreTwin && (!generated?.text || generated.unavailable)) {
+        setMessages(p => p.map((m, i) =>
+          i === assistantIndex
+            ? {
+                ...m,
+                content: TWIN_SERVICE_UNAVAILABLE_MESSAGE,
+                streaming: false,
+                stopped: false,
+                error: true,
+                kind: "grounded",
+                prompt: question || m.prompt,
+                voiceError: false,
+              }
+            : m
+        ));
+        setLoading(false);
+        setVoiceState("idle");
+        if (voiceConversationRef.current && modeRef.current === "qa") {
+          scheduleVoiceRelisten();
+        } else {
+          setVoiceSessionActive(false);
+        }
+        return;
+      }
+
       const reply = generated?.text || answerQuestion(athlete, question);
       const kind = detectResponseKind(reply);
       setMessages(p => p.map((m, i) =>
@@ -392,7 +419,9 @@ export default function useTwinEngine({ athlete, mode, onClose, onSwitchMode, pr
         i === assistantIndex
           ? {
               ...m,
-              content: m.content || STREAM_ERROR_MESSAGE,
+              content: m.content || (isStudioAnthropicQaAthlete(athlete)
+                ? TWIN_SERVICE_UNAVAILABLE_MESSAGE
+                : STREAM_ERROR_MESSAGE),
               streaming: false,
               error: !m.content,
               prompt: question || m.prompt,

@@ -2,18 +2,14 @@ import React from "react";
 
 /**
  * Compact twin mode switch — lives inside Story Entry, visible in both modes.
+ * Mode buttons alone communicate the switch; status copy lives in the chat/story panels.
  */
 export default function DigitalTwinModeBar({ talent, mode, onModeChange }) {
   if (!talent.twin?.available) return null;
   const modes = talent.twin.modes || ["narrator", "ask"];
-  const statusLine =
-    mode === "ask"
-      ? "Ask from verified timeline material"
-      : "Guided narrator · verified chapters";
 
   return (
     <div className="wt-twin-switch" aria-label="Digital twin modes">
-      <p className="wt-twin-switch-status">{statusLine}</p>
       <div className="wt-twin-switch-actions" role="group" aria-label="Twin interaction mode">
         {modes.includes("narrator") && (
           <button
@@ -32,7 +28,7 @@ export default function DigitalTwinModeBar({ talent, mode, onModeChange }) {
             aria-pressed={mode === "ask"}
             onClick={() => onModeChange("ask")}
           >
-            {talent.twin.askCtaLabel}
+            {talent.twin.askCtaLabel || "Ask a question"}
           </button>
         )}
       </div>

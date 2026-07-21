@@ -220,7 +220,7 @@ function VoiceStatusPill({ voiceState }) {
   const label = voiceState === "listening"
     ? "Listening. Ask naturally."
     : voiceState === "thinking"
-      ? "Checking verified records."
+      ? "Checking records."
       : voiceState === "speaking"
         ? "Speaking response."
         : null;
@@ -841,8 +841,8 @@ export default function TwinStoryShell({
 
       <DigitalTwinModeBar talent={pack} mode={uiMode} onModeChange={handleModeChange} />
 
-      <section className="wt-story-entry" aria-label="Twin story entry">
-        {uiMode === "narrator" ? (
+      {uiMode === "narrator" ? (
+        <section className="wt-story-entry" aria-label="Twin story entry">
           <header className="wt-hook">
             <div className="wt-hook-grad" />
             {pack.portraitSrc ? (
@@ -873,17 +873,8 @@ export default function TwinStoryShell({
             </div>
             <div className="wt-scrollcue"><ArrowDown size={13} /> Play or explore the timeline</div>
           </header>
-        ) : (
-          <div className="wt-ask-entry">
-            <div className="wt-wrap wt-ask-entry-inner">
-              <h1 className="wt-talent-name">{pack.displayName}</h1>
-              <p className="wt-ask-entry-cue">
-                Ask {pack.displayName} directly from verified timeline material.
-              </p>
-            </div>
-          </div>
-        )}
-      </section>
+        </section>
+      ) : null}
 
       <section className="wt-rail wt-narrator-panel" aria-label={pack.copy.timelineAriaLabel} hidden={uiMode === "ask"}>
         <p className="wt-timeline-kicker">
@@ -967,8 +958,10 @@ export default function TwinStoryShell({
       <section className="wt-chatsec wt-ask-panel" ref={chatRef} aria-label={`Ask ${pack.displayName}`} hidden={uiMode === "narrator"}>
         <div className="wt-wrap">
           <div className="wt-chat-head">
-            <span className="wt-eyebrow">{pack.copy.chatEyebrow}</span>
-            <h2 className="wt-chat-h2" style={{ marginTop: 10 }}>
+            {pack.copy.chatEyebrow ? (
+              <span className="wt-eyebrow">{pack.copy.chatEyebrow}</span>
+            ) : null}
+            <h2 className="wt-chat-h2" style={{ marginTop: pack.copy.chatEyebrow ? 10 : 0 }}>
               Ask <span className="who">{pack.displayName}</span>
             </h2>
           </div>
@@ -1122,9 +1115,11 @@ export default function TwinStoryShell({
               )}
             </div>          </div>
 
-          <p className="wt-foot" style={{ whiteSpace: "pre-line" }}>
-            {pack.copy.footer}
-          </p>
+          {pack.copy.footer ? (
+            <p className="wt-foot" style={{ whiteSpace: "pre-line" }}>
+              {pack.copy.footer}
+            </p>
+          ) : null}
         </div>
       </section>
     </div>
